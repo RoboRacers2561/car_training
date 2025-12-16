@@ -1,16 +1,14 @@
-# Template for Isaac Lab Projects
+# Repo for Self Driving Cars
 
 ## Overview
 
-This project/repository serves as a template for building projects or extensions based on Isaac Lab.
-It allows you to develop in an isolated environment, outside of the core Isaac Lab repository.
+This repository is for training ackermann self driving vehicles in IsaacLab framework. The repository is set up so that it works in isolation and avoids directly editting IsaacLab files. 
 
 **Key Features:**
 
-- `Isolation` Work outside the core Isaac Lab repository, ensuring that your development efforts remain self-contained.
-- `Flexibility` This template is set up to allow your code to be run as an extension in Omniverse.
+- `Isolation` Works outside the core Isaac Lab repository, ensuring development efforts remain self-contained.
+- `Flexibility` This repo is set up to allow for the code to be run as an extension in Omniverse.
 
-**Keywords:** extension, template, isaaclab
 
 ## Installation
 
@@ -61,7 +59,7 @@ It allows you to develop in an isolated environment, outside of the core Isaac L
             python scripts/random_agent.py --task=<TASK_NAME>
             ```
 
-### Set up IDE (Optional)
+### Set up IDE
 
 To setup the IDE, please follow these instructions:
 
@@ -72,9 +70,9 @@ If everything executes correctly, it should create a file .python.env in the `.v
 The file contains the python paths to all the extensions provided by Isaac Sim and Omniverse.
 This helps in indexing all the python modules for intelligent suggestions while writing code.
 
-### Setup as Omniverse Extension (Optional)
+### Setup as Omniverse Extension
 
-We provide an example UI extension that will load upon enabling your extension defined in `source/car_training/car_training/ui_extension_example.py`.
+An example UI extension is provided that will load upon enabling your extension defined in `source/car_training/car_training/ui_extension_example.py`.
 
 To enable your extension, follow these steps:
 
@@ -91,7 +89,7 @@ To enable your extension, follow these steps:
 
 ## Code formatting
 
-We have a pre-commit template to automatically format your code.
+There is a pre-commit template to automatically format your code.
 To install pre-commit:
 
 ```bash
