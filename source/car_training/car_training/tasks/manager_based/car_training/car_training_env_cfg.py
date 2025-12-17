@@ -58,15 +58,21 @@ LEATHERBACK_CFG = ArticulationCfg(
         rot=(0.0, 0.0, 0.0, 1.0),
         lin_vel=(0.0, 0.0, 0.0),
         ang_vel=(0.0, 0.0, 0.0),
+        joint_pos={
+            "Wheel__Knuckle__Front_Left": 0.0,
+            "Wheel__Knuckle__Front_Right": 0.0,
+            "Wheel__Upright__Rear_Right": 0.0,
+            "Wheel__Upright__Rear_Left": 0.0,
+            "Knuckle__Upright__Front_Right": 0.0,
+            "Knuckle__Upright__Front_Left": 0.0,
+            "Shock__Rear_Right": -0.03,
+            "Shock__Rear_Left":  -0.03,
+            "Shock__Front_Right": 0.03,
+            "Shock__Front_Left":  0.03,
+
+        },
     ),
-    actuators = {
-        "steering": ImplicitActuatorCfg(
-            joint_names_expr=["Wheel_Knuckle.*"],
-            effort_limit=40000.0,
-            velocity_limit=100.0,
-            stiffness=5000.0,
-            damping=1000.0,
-        ),
+    actuators={
         "throttle": ImplicitActuatorCfg(
             joint_names_expr=["Wheel.*"],
             effort_limit=40000.0,
@@ -74,7 +80,14 @@ LEATHERBACK_CFG = ArticulationCfg(
             stiffness=0.0,
             damping=100000.0,
         ),
-    }
+        "steering": ImplicitActuatorCfg(
+            joint_names_expr=["Knuckle__Upright__Front.*"],
+            effort_limit=40000.0,
+            velocity_limit=100.0,
+            stiffness=1000.0,
+            damping=0.0,
+        ),
+    },
     
 )
 
@@ -85,22 +98,35 @@ LEATHERBACK_CFG = ArticulationCfg(
 
 
 @configclass
-class TrackCfg(AssetBaseCfg):
-    """Per-env ground tile with texture."""
-
-    #prim_path: str = "{ENV_REGEX_NS}/track"
-    prim_path="/World/Terrain"
+class PlaneCfg(AssetBaseCfg):
+    """Ground Plane configuration."""
+    prim_path="/World/Plane"
     spawn: sim_utils.GroundPlaneCfg = sim_utils.GroundPlaneCfg(
-        size=(10.0, 10.0),
+        size=(1000.0, 1000.0),
         visible=True,
     )
 
 
 @configclass
+class TrackCfg(AssetBaseCfg): # TODO: Currently not used
+    """Per-env track configuration."""
+    prim_path: str = "{ENV_REGEX_NS}/Track"
+    spawn: sim_utils.UsdFileCfg = sim_utils.UsdFileCfg(
+        usd_path="source/car_training/car_training/tasks/manager_based/car_training/assets/track_assets/track.usd",
+        rigid_props=sim_utils.RigidBodyPropertiesCfg(
+            rigid_body_enabled=True,
+            max_linear_velocity=10.0,
+            max_angular_velocity=10.0,
+            max_depenetration_velocity=100.0,
+            enable_gyroscopic_forces=True,
+        ),
+    )
+
+@configclass
 class OverheadCameraCfg(TiledCameraCfg):
     """Configuration for the per-env overhead camera."""
     prim_path: str = "{ENV_REGEX_NS}/OverheadCamera"
-    offset: TiledCameraCfg.OffsetCfg = TiledCameraCfg.OffsetCfg(pos=(0.134, 0.0, 0.0225), rot=(0.70711, 0.0, 0.0, -0.70711), convention="opengl")
+    offset: TiledCameraCfg.OffsetCfg = TiledCameraCfg.OffsetCfg(pos=(0.0, 0.0, 1.0), rot=(0.7071, 0.0, 0.0, -0.7071), convention="opengl")
     data_types: list = ["rgb"]
     spawn: sim_utils.PinholeCameraCfg = sim_utils.PinholeCameraCfg(
         focal_length=18.14756,
@@ -116,8 +142,11 @@ class OverheadCameraCfg(TiledCameraCfg):
 class CarTrainingSceneCfg(InteractiveSceneCfg):
     """Configuration for a driving scene."""
 
+    # ground plane
+    ground_plane: PlaneCfg = PlaneCfg()
+
     # track
-    track: TrackCfg = TrackCfg()
+    #track: TrackCfg = TrackCfg()
 
     # robot
     robot: ArticulationCfg = LEATHERBACK_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
@@ -144,14 +173,14 @@ class ActionsCfg:
     # Throttle control for rear wheels (effort)
     throttle = mdp.JointEffortActionCfg(
         asset_name="robot",
-        joint_names=["rear_left_wheel", "rear_right_wheel"],
+        joint_names=["Wheel__Upright__Rear_Left", "Wheel__Upright__Rear_Right"],
         scale=100.0
     )
 
     # Steering control for front wheels (position)
     steering = mdp.JointPositionActionCfg(
         asset_name="robot",
-        joint_names=["left_wheel_knuckle", "right_wheel_knuckle"],
+        joint_names=["Knuckle__Upright__Front_Right","Knuckle__Upright__Front_Left"],
         scale=1.0
     )
 
@@ -165,13 +194,15 @@ class ObservationsCfg:
 
         # observation terms (order preserved)
         image = ObsTerm(func=gray_image,
-                        params={"asset_cfg": SceneEntityCfg("tiled_camera")},
+                        params={"asset_cfg": SceneEntityCfg("overhead_camera")},
                         clip=(0.0, 255.0),)
-        joint_vel_rel = ObsTerm(func=get_velocity)
+        joint_vel_rel = ObsTerm(func=get_velocity,
+                                params={"asset_cfg": SceneEntityCfg("robot")},
+                                clip=(-10.0, 10.0),)
 
         def __post_init__(self) -> None:
             self.enable_corruption = False
-            self.concatenate_terms = True
+            self.concatenate_terms = False
 
     # observation groups
     policy: PolicyCfg = PolicyCfg()
@@ -182,11 +213,7 @@ class EventCfg:
     """Configuration for events."""
 
     # reset
-    reset_robot_position = EventTerm( # TODO: Where tf does this function come from
-        func=mdp.reset_scene_to_default,
-        mode="reset",
-        params={"asset_cfg": SceneEntityCfg("robot")}
-    )
+    reset_robot_position = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
 
 @configclass
@@ -197,7 +224,7 @@ class RewardsCfg:
     total_reward = RewTerm(
         func=get_total_reward,
         params={
-            "asset_cfg": SceneEntityCfg("robot"),
+            "asset_cfg": SceneEntityCfg("overhead_camera"),
             "completed_laps": 0,  # TODO: Replace with actual completed laps
             "total_laps": 3,      # TODO: Replace with actual total laps
             "max_speed": 10.0,    # TODO: Replace with actual max speed
@@ -211,9 +238,20 @@ class TerminationsCfg:
     """Termination terms for the MDP."""
 
     # Out of bounds termination
-    out_of_bounds = DoneTerm(func=off_track_termination)
+    out_of_bounds = DoneTerm(func=off_track_termination, 
+                             params={"asset_cfg": SceneEntityCfg("overhead_camera")},)
 
 
+
+@configclass
+class CommandCfg:
+    """No command configuration for the MDP."""
+    pass
+
+@configclass
+class CurriculumCfg:
+    """Curriculum configuration for the MDP."""
+    pass
 
 ##
 # Environment configuration
@@ -223,7 +261,7 @@ class TerminationsCfg:
 @configclass
 class CarTrainingEnvCfg(ManagerBasedRLEnvCfg):
     # Scene settings
-    scene: CarTrainingSceneCfg = CarTrainingSceneCfg(num_envs=4096, env_spacing=10.0)
+    scene: CarTrainingSceneCfg = CarTrainingSceneCfg(num_envs=2, env_spacing=5.0)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
@@ -231,6 +269,9 @@ class CarTrainingEnvCfg(ManagerBasedRLEnvCfg):
     # MDP settings
     rewards: RewardsCfg = RewardsCfg()
     terminations: TerminationsCfg = TerminationsCfg()
+    curriculum: CurriculumCfg = CurriculumCfg()
+    # no command config
+    commands: CommandCfg = CommandCfg()
 
     # Post initialization
     def __post_init__(self) -> None:

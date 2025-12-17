@@ -51,6 +51,9 @@ def get_total_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, complete
 
     all_rewards = []
     for frames in cam_data['rgb']:
+        print(f"frames.shape:{frames.shape, type(frames)}")
+        cv2.imwrite("debug_image.png", frames)  # Save the image for debugging
+        print("Saved debug_image.png")
         # for each copy of the simulation find the track points and compute the reward
         track_points_list = find_track_points_from_image(frames)
         car_center = None # TODO: Need to understand how to get the car's center position from the asset or env (potentially using a gps)

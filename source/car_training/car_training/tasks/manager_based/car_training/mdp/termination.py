@@ -29,10 +29,12 @@ def off_track_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> 
     asset: Articulation = env.scene[asset_cfg.name]
     
     cam_data = convert_dict_to_backend(
-                {k: v for k, v in asset.data.output.items()}, backend="torch")
+                {k: v for k, v in asset.data.output.items()}, backend="numpy")
 
     off_track_flags = []
     for img in cam_data['rgb']:
+        cv2.imwrite("debug_termination_image.png", img)  # Save the image for debugging
+        print("Saved debug_termination_image.png")
         track_points_list = find_track_points_from_image(img)
         car_center = None  # TODO: Need to get the car's center position
         off_track = is_off_track(car_center, track_points_list)
