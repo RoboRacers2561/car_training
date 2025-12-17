@@ -18,12 +18,42 @@ from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
 
 from . import mdp
+from mdp.rewards import get_total_reward
+from mdp.observation import gray_img, get_velocity
+from mdp.termination import out_of_bounds
 
-##
-# Pre-defined configs
+import os
+usd_path = os.path.join(os.path.dirname(__file__), "../../../assets/robot_assets/leatherback.usd")
+
+
+## 
+# Leatherback Articulation Config
 ##
 
-from isaaclab_assets.robots.cartpole import CARTPOLE_CFG  # isort:skip
+
+LEATHERBACK_CFG = ArticulationCfg(
+    usd_path=usd_path,
+    prim_path="{ENV_REGEX_NS}/Robot",
+
+    init_state= ArticulationCfg.InitState(
+        pos=(0.0, 0.0, 0.0),
+        ori=(0.0, 0.0, 0.0, 1.0),
+        linear_vel=(0.0, 0.0, 0.0),
+        angular_vel=(0.0, 0.0, 0.0),
+    ),
+    actuators= ArticulationCfg.Actuators(
+        # Rear wheels - throttle
+        joint_effort=ArticulationCfg.Actuators.JointEffort(
+            joint_names=["rear_left_wheel", "rear_right_wheel"],
+            scale=1.0,
+        ),
+        # Front wheels - steering
+        joint_position=ArticulationCfg.Actuators.JointPosition(
+            joint_names=["front_left_steering", "front_right_steering"],
+            scale=1.0,
+        ), 
+    ),
+)
 
 
 ##
@@ -32,17 +62,46 @@ from isaaclab_assets.robots.cartpole import CARTPOLE_CFG  # isort:skip
 
 
 @configclass
-class CarTrainingSceneCfg(InteractiveSceneCfg):
-    """Configuration for a cart-pole scene."""
+class TrackCfg(sim_utils.AssetBaseCfg):
+    """Per-env ground tile with texture."""
 
-    # ground plane
-    ground = AssetBaseCfg(
-        prim_path="/World/ground",
-        spawn=sim_utils.GroundPlaneCfg(size=(100.0, 100.0)),
+    prim_path: str = "{ENV_REGEX_NS}/track"
+
+    spawn: sim_utils.PrimitiveCfg = sim_utils.PrimitiveCfg(
+        prim_type="Plane",
+        size=(10.0, 10.0),
+        collision=True,
+        visual=True,
     )
 
+
+@configclass
+class CameraCfg(AssetBaseCfg):
+    """Configuration for the per-env overhead camera."""
+    prim_path: str = "{ENV_REGEX_NS}/OverheadCamera"
+    spawn: sim_utils.CameraCfg = sim_utils.CameraCfg(
+        pos=(0.0, 0.0, 30.0),
+        ori=(0.7071, 0.0, 0.0, 0.7071),  # looking down
+        horizontal_fov=math.radians(90.0),
+        resolution=(256, 256),
+        enable_rgb=True,
+        enable_depth=False,
+        enable_segmentation=False,
+    )
+
+
+@configclass
+class CarTrainingSceneCfg(InteractiveSceneCfg):
+    """Configuration for a driving scene."""
+
+    # track
+    track: TrackCfg = TrackCfg()
+
     # robot
-    robot: ArticulationCfg = CARTPOLE_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    robot: ArticulationCfg = LEATHERBACK_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+
+    # overhead camera
+    overhead_camera: CameraCfg = CameraCfg()
 
     # lights
     dome_light = AssetBaseCfg(
@@ -60,7 +119,7 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
 class ActionsCfg:
     """Action specifications for the MDP."""
 
-    joint_effort = mdp.JointEffortActionCfg(asset_name="robot", joint_names=["slider_to_cart"], scale=100.0)
+    joint_effort = mdp.JointEffortActionCfg(asset_name="robot", joint_names=["rear_left_wheel", "rear_right_wheel"], scale=100.0) # TODO: convert to steering/throttle
 
 
 @configclass
@@ -72,8 +131,10 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel)
-        joint_vel_rel = ObsTerm(func=mdp.joint_vel_rel)
+        image = ObsTerm(func=mdp.gray_img,
+                        params={"asset_cfg": SceneEntityCfg("tiled_camera")},
+                        clip=(0.0, 255.0),)
+        joint_vel_rel = ObsTerm(func=mdp.get_velocity)
 
         def __post_init__(self) -> None:
             self.enable_corruption = False
@@ -88,7 +149,7 @@ class EventCfg:
     """Configuration for events."""
 
     # reset
-    reset_cart_position = EventTerm(
+    reset_robot_position = EventTerm( # TODO: Convert to resetting the car on the track at start pos and 0 velocity
         func=mdp.reset_joints_by_offset,
         mode="reset",
         params={
@@ -98,42 +159,21 @@ class EventCfg:
         },
     )
 
-    reset_pole_position = EventTerm(
-        func=mdp.reset_joints_by_offset,
-        mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("robot", joint_names=["cart_to_pole"]),
-            "position_range": (-0.25 * math.pi, 0.25 * math.pi),
-            "velocity_range": (-0.25 * math.pi, 0.25 * math.pi),
-        },
-    )
-
 
 @configclass
 class RewardsCfg:
     """Reward terms for the MDP."""
 
-    # (1) Constant running reward
-    alive = RewTerm(func=mdp.is_alive, weight=1.0)
-    # (2) Failure penalty
-    terminating = RewTerm(func=mdp.is_terminated, weight=-2.0)
-    # (3) Primary task: keep pole upright
-    pole_pos = RewTerm(
-        func=mdp.joint_pos_target_l2,
-        weight=-1.0,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["cart_to_pole"]), "target": 0.0},
-    )
-    # (4) Shaping tasks: lower cart velocity
-    cart_vel = RewTerm(
-        func=mdp.joint_vel_l1,
-        weight=-0.01,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["slider_to_cart"])},
-    )
-    # (5) Shaping tasks: lower pole angular velocity
-    pole_vel = RewTerm(
-        func=mdp.joint_vel_l1,
-        weight=-0.005,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["cart_to_pole"])},
+    # Get total reward from mdp.rewards.get_total_reward
+    total_reward = RewTerm(
+        func=get_total_reward,
+        params={
+            "asset_cfg": SceneEntityCfg("robot"),
+            "completed_laps": 0,  # TODO: Replace with actual completed laps
+            "total_laps": 3,      # TODO: Replace with actual total laps
+            "max_speed": 10.0,    # TODO: Replace with actual max speed
+        },
+        weight=1.0,
     )
 
 
@@ -141,13 +181,9 @@ class RewardsCfg:
 class TerminationsCfg:
     """Termination terms for the MDP."""
 
-    # (1) Time out
-    time_out = DoneTerm(func=mdp.time_out, time_out=True)
-    # (2) Cart out of bounds
-    cart_out_of_bounds = DoneTerm(
-        func=mdp.joint_pos_out_of_manual_limit,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["slider_to_cart"]), "bounds": (-3.0, 3.0)},
-    )
+    # Out of bounds termination
+    out_of_bounds = DoneTerm(func=mdp.out_of_bounds, out_of_bounds=True)
+
 
 
 ##
@@ -158,7 +194,7 @@ class TerminationsCfg:
 @configclass
 class CarTrainingEnvCfg(ManagerBasedRLEnvCfg):
     # Scene settings
-    scene: CarTrainingSceneCfg = CarTrainingSceneCfg(num_envs=4096, env_spacing=4.0)
+    scene: CarTrainingSceneCfg = CarTrainingSceneCfg(num_envs=4096, env_spacing=10.0)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
@@ -172,9 +208,9 @@ class CarTrainingEnvCfg(ManagerBasedRLEnvCfg):
         """Post initialization."""
         # general settings
         self.decimation = 2
-        self.episode_length_s = 5
+        self.episode_length_s = 15
         # viewer settings
         self.viewer.eye = (8.0, 0.0, 5.0)
         # simulation settings
-        self.sim.dt = 1 / 120
+        self.sim.dt = 0.05
         self.sim.render_interval = self.decimation
