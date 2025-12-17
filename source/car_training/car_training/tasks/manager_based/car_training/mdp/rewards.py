@@ -180,6 +180,24 @@ def remains_alive_reward(weight=1.0):
     """
     return 1.0
 
+def is_off_track(car_center: tuple[float, float], track_points_list: list[tuple[float, float]], threshold_distance=5.0):
+    """
+    Check if the car is off the track based on its distance from the closest track point.
+
+    :param car_center: Tuple representing the car's center coordinates (x, y).
+    :type car_center: tuple[float, float]
+    :param track_points_list: List of tuples representing the track points (x, y).
+    :type track_points_list: list[tuple[float, float]]
+    :param threshold_distance: Distance threshold to determine if the car is off track.
+    :type threshold_distance: float
+
+    :return: True if the car is off track, False otherwise.
+    :rtype: bool
+    """
+    closest_track_point = __find_closest_track_point(car_center, track_points_list)
+    distance = np.linalg.norm(np.array(car_center) - np.array(closest_track_point))
+    return distance > threshold_distance
+
 def leaves_track_penalty(car_center: tuple[float, float], track_points_list: list[tuple[float, float]], weight=1.0):
     """
     Calculate penalty if the car leaves the track.
