@@ -12,7 +12,7 @@ from isaaclab.utils import convert_dict_to_backend
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
-from rewards import is_off_track, find_track_points_from_image
+from car_training.tasks.manager_based.car_training.mdp.rewards import is_off_track, find_track_points_from_image
 
 def off_track_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     """

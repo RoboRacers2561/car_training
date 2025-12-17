@@ -16,15 +16,20 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
+from isaaclab.sensors import CameraCfg, TiledCameraCfg
+from isaaclab.actuators import ImplicitActuatorCfg
 
 from . import mdp
-from mdp.rewards import get_total_reward
-from mdp.observation import gray_img, get_velocity
-from mdp.termination import out_of_bounds
+from car_training.tasks.manager_based.car_training.mdp.rewards import get_total_reward
+from car_training.tasks.manager_based.car_training.mdp.observation import gray_image, get_velocity
+from car_training.tasks.manager_based.car_training.mdp.termination import off_track_termination
 
 import os
-usd_path = os.path.join(os.path.dirname(__file__), "../../../assets/robot_assets/leatherback.usd")
-
+from pathlib import Path
+PROJECT_ROOT = Path(__file__).parents[6].resolve()
+print(f"Project root: {PROJECT_ROOT}")
+usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/robot_assets/leatherback.usd")
+print(f"USD Path: {usd_path}")
 
 ## 
 # Leatherback Articulation Config
@@ -32,27 +37,45 @@ usd_path = os.path.join(os.path.dirname(__file__), "../../../assets/robot_assets
 
 
 LEATHERBACK_CFG = ArticulationCfg(
-    usd_path=usd_path,
-    prim_path="{ENV_REGEX_NS}/Robot",
-
-    init_state= ArticulationCfg.InitState(
-        pos=(0.0, 0.0, 0.0),
-        ori=(0.0, 0.0, 0.0, 1.0),
-        linear_vel=(0.0, 0.0, 0.0),
-        angular_vel=(0.0, 0.0, 0.0),
-    ),
-    actuators= ArticulationCfg.Actuators(
-        # Rear wheels - throttle
-        joint_effort=ArticulationCfg.Actuators.JointEffort(
-            joint_names=["rear_left_wheel", "rear_right_wheel"],
-            scale=1.0,
+    spawn=sim_utils.UsdFileCfg(usd_path=usd_path,                       
+        rigid_props=sim_utils.RigidBodyPropertiesCfg(
+            rigid_body_enabled=True,
+            max_linear_velocity=10.0,
+            max_angular_velocity=10.0,
+            max_depenetration_velocity=100.0,
+            enable_gyroscopic_forces=True,
         ),
-        # Front wheels - steering
-        joint_position=ArticulationCfg.Actuators.JointPosition(
-            joint_names=["front_left_steering", "front_right_steering"],
-            scale=1.0,
-        ), 
+        articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+            enabled_self_collisions=False,
+            solver_position_iteration_count=4,
+            solver_velocity_iteration_count=0,
+            sleep_threshold=0.005,
+            stabilization_threshold=0.001,
+        ),),
+
+    init_state= ArticulationCfg.InitialStateCfg(
+        pos=(0.0, 0.0, 0.0),
+        rot=(0.0, 0.0, 0.0, 1.0),
+        lin_vel=(0.0, 0.0, 0.0),
+        ang_vel=(0.0, 0.0, 0.0),
     ),
+    actuators = {
+        "steering": ImplicitActuatorCfg(
+            joint_names_expr=["Wheel_Knuckle.*"],
+            effort_limit=40000.0,
+            velocity_limit=100.0,
+            stiffness=5000.0,
+            damping=1000.0,
+        ),
+        "throttle": ImplicitActuatorCfg(
+            joint_names_expr=["Wheel.*"],
+            effort_limit=40000.0,
+            velocity_limit=100.0,
+            stiffness=0.0,
+            damping=100000.0,
+        ),
+    }
+    
 )
 
 
@@ -62,32 +85,31 @@ LEATHERBACK_CFG = ArticulationCfg(
 
 
 @configclass
-class TrackCfg(sim_utils.AssetBaseCfg):
+class TrackCfg(AssetBaseCfg):
     """Per-env ground tile with texture."""
 
-    prim_path: str = "{ENV_REGEX_NS}/track"
-
-    spawn: sim_utils.PrimitiveCfg = sim_utils.PrimitiveCfg(
-        prim_type="Plane",
+    #prim_path: str = "{ENV_REGEX_NS}/track"
+    prim_path="/World/Terrain"
+    spawn: sim_utils.GroundPlaneCfg = sim_utils.GroundPlaneCfg(
         size=(10.0, 10.0),
-        collision=True,
-        visual=True,
+        visible=True,
     )
 
 
 @configclass
-class CameraCfg(AssetBaseCfg):
+class OverheadCameraCfg(TiledCameraCfg):
     """Configuration for the per-env overhead camera."""
     prim_path: str = "{ENV_REGEX_NS}/OverheadCamera"
-    spawn: sim_utils.CameraCfg = sim_utils.CameraCfg(
-        pos=(0.0, 0.0, 30.0),
-        ori=(0.7071, 0.0, 0.0, 0.7071),  # looking down
-        horizontal_fov=math.radians(90.0),
-        resolution=(256, 256),
-        enable_rgb=True,
-        enable_depth=False,
-        enable_segmentation=False,
+    offset: TiledCameraCfg.OffsetCfg = TiledCameraCfg.OffsetCfg(pos=(0.134, 0.0, 0.0225), rot=(0.70711, 0.0, 0.0, -0.70711), convention="opengl")
+    data_types: list = ["rgb"]
+    spawn: sim_utils.PinholeCameraCfg = sim_utils.PinholeCameraCfg(
+        focal_length=18.14756,
+        focus_distance=400.0,
+        horizontal_aperture=20.955,
+        clipping_range=(0.01, 20.0)
     )
+    width: int = 96
+    height: int = 72
 
 
 @configclass
@@ -101,7 +123,7 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
     robot: ArticulationCfg = LEATHERBACK_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
     # overhead camera
-    overhead_camera: CameraCfg = CameraCfg()
+    overhead_camera: OverheadCameraCfg = OverheadCameraCfg()
 
     # lights
     dome_light = AssetBaseCfg(
@@ -119,8 +141,19 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
 class ActionsCfg:
     """Action specifications for the MDP."""
 
-    joint_effort = mdp.JointEffortActionCfg(asset_name="robot", joint_names=["rear_left_wheel", "rear_right_wheel"], scale=100.0) # TODO: convert to steering/throttle
+    # Throttle control for rear wheels (effort)
+    throttle = mdp.JointEffortActionCfg(
+        asset_name="robot",
+        joint_names=["rear_left_wheel", "rear_right_wheel"],
+        scale=100.0
+    )
 
+    # Steering control for front wheels (position)
+    steering = mdp.JointPositionActionCfg(
+        asset_name="robot",
+        joint_names=["left_wheel_knuckle", "right_wheel_knuckle"],
+        scale=1.0
+    )
 
 @configclass
 class ObservationsCfg:
@@ -131,10 +164,10 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        image = ObsTerm(func=mdp.gray_img,
+        image = ObsTerm(func=gray_image,
                         params={"asset_cfg": SceneEntityCfg("tiled_camera")},
                         clip=(0.0, 255.0),)
-        joint_vel_rel = ObsTerm(func=mdp.get_velocity)
+        joint_vel_rel = ObsTerm(func=get_velocity)
 
         def __post_init__(self) -> None:
             self.enable_corruption = False
@@ -149,14 +182,10 @@ class EventCfg:
     """Configuration for events."""
 
     # reset
-    reset_robot_position = EventTerm( # TODO: Convert to resetting the car on the track at start pos and 0 velocity
-        func=mdp.reset_joints_by_offset,
+    reset_robot_position = EventTerm( # TODO: Where tf does this function come from
+        func=mdp.reset_scene_to_default,
         mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("robot", joint_names=["slider_to_cart"]),
-            "position_range": (-1.0, 1.0),
-            "velocity_range": (-0.5, 0.5),
-        },
+        params={"asset_cfg": SceneEntityCfg("robot")}
     )
 
 
@@ -182,7 +211,7 @@ class TerminationsCfg:
     """Termination terms for the MDP."""
 
     # Out of bounds termination
-    out_of_bounds = DoneTerm(func=mdp.out_of_bounds, out_of_bounds=True)
+    out_of_bounds = DoneTerm(func=off_track_termination)
 
 
 
