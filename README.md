@@ -68,7 +68,10 @@ To setup the IDE, please follow these instructions:
 
 If everything executes correctly, it should create a file .python.env in the `.vscode` directory.
 The file contains the python paths to all the extensions provided by Isaac Sim and Omniverse.
-This helps in indexing all the python modules for intelligent suggestions while writing code.
+This helps in indexing all the python modules for intelligent suggestions while writing code. This is related to IsaacSim and Omniverse syntax highlighting. 
+
+- To enable syntax highlighting for IsaacLab related modules, make sure to manually add the full path to `settings.json` file. 
+
 
 ### Setup as Omniverse Extension
 
