@@ -38,17 +38,15 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
     :return: Total reward calculated from various factors.
     :rtype: float
     """
-    ###### Here I am blindly copying the code from the youtube video.
+
     camera: Articulation = env.scene[camera_cfg.name]
     
     cam_data = convert_dict_to_backend(
                 {k: v for k, v in camera.data.output.items()}, backend="numpy")
 
     # compute the reward
-    #print(f"cam_data['rgb'].shape:{cam_data['rgb'].shape, type(cam_data['rgb'])}")
+
     H, W, _ = cam_data['rgb'][0].shape
-    #print(f"H:{H}")
-    #########################################################
 
     # Here I think we can have access to the sensors and images for each copy of the simulation.
     # We can compute the reward for each copy separately and then combine them.

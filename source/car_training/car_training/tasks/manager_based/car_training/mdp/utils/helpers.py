@@ -84,6 +84,7 @@ def track_completion_reward(completed_laps: int, total_laps: int, weight=1.0):
     reward = normalized_completion * weight
     return reward
 
+
 def distance_from_center_reward(car_center: tuple[float, float], track_points_list: list[tuple[float, float]], weight=1.0):
     """
     Calculate reward based on the car's distance from the center of the track.
@@ -108,6 +109,7 @@ def distance_from_center_reward(car_center: tuple[float, float], track_points_li
     reward = 1.0 - normalized_distance
     return reward * weight
 
+
 def __find_closest_track_point(car_center: tuple[float, float], track_points_list: list[tuple[float, float]], weight=1.0):
     """
     Find the closest track point to the car's center. If the track points list is empty, return (0.0, 0.0).
@@ -129,6 +131,7 @@ def __find_closest_track_point(car_center: tuple[float, float], track_points_lis
     closest_index = np.argmin(distances)
     return track_points_list[closest_index] * weight
 
+
 def velocity_reward(car_speed: float, max_speed: float, weight=1.0):
     """
     Calculates reward based on the car's speed relative to the maximum speed.
@@ -145,7 +148,7 @@ def velocity_reward(car_speed: float, max_speed: float, weight=1.0):
     reward = normalized_speed * weight
     return reward
 
-# TODO: Need to complete this, still do not know how 
+
 def remains_alive_reward(weight=1.0):
     """
     Returns a constant reward for remaining alive.
@@ -158,6 +161,7 @@ def remains_alive_reward(weight=1.0):
     """
     reward = 1.0 * weight
     return reward
+
 
 def is_off_track(car_center: tuple[float, float], track_points_list: list[tuple[float, float]], threshold_distance=5.0):
     """
@@ -180,6 +184,7 @@ def is_off_track(car_center: tuple[float, float], track_points_list: list[tuple[
     closest_track_point = __find_closest_track_point(car_center, track_points_list)
     distance = np.linalg.norm(np.array(car_center) - np.array(closest_track_point))
     return distance > threshold_distance
+
 
 def leaves_track_penalty(car_center: tuple[float, float], track_points_list: list[tuple[float, float]], weight=1.0):
     """
@@ -207,6 +212,7 @@ def leaves_track_penalty(car_center: tuple[float, float], track_points_list: lis
         penalty = 0.0  # No penalty if the car is within the track limits
     return penalty
 
+
 def get_green_car_mask(image, debug=False):
     """
     Generate a mask for the green car in the image.
@@ -232,6 +238,7 @@ def get_green_car_mask(image, debug=False):
         cv2.imwrite(f"{TEST_DATA_PATH}/debug_green_car_mask.png", mask)
 
     return mask
+
 
 def get_green_car_center(image, debug=False):
     """
@@ -264,6 +271,20 @@ def get_green_car_center(image, debug=False):
     return (0,0)  # Car not found
 
 
+def convert_coords(isaaclab_coords: tuple[float, float], isaaclab_dimensions: tuple[float, float], image_dimensions: tuple[float, float]) -> tuple[float, float]:
+    """
+    Convert Isaaclab coordinates to image coordinates. 
+    Isaaclab origin is at center, image origin is at top-left.
+    """
+    x_isaaclab, y_isaaclab = isaaclab_coords
+    width_isaaclab, height_isaaclab = isaaclab_dimensions
+    width_image, height_image = image_dimensions
+
+    # Convert coordinates
+    x_image = (x_isaaclab + width_isaaclab / 2) * (width_image / width_isaaclab)
+    y_image = (height_isaaclab / 2 - y_isaaclab) * (height_image / height_isaaclab)
+
+    return (x_image, y_image)
 
 
 if __name__ == "__main__":
@@ -277,9 +298,17 @@ if __name__ == "__main__":
     closest_point = __find_closest_track_point(car_center, track_points)
     print(f"Closest track point to car center: {closest_point}")
 
+    isaaclab_coords = (2.5, 2.5)
+    isaaclab_dimensions = (10.0, 10.0)  # Example dimensions
+    image_dimensions = (512, 512)  # Example image dimensions
+    image_coords = convert_coords(isaaclab_coords, isaaclab_dimensions, image_dimensions)
+    print(f"Converted image coordinates: {image_coords}")
+
     cv2.circle(test_image, (int(closest_point[0]), int(closest_point[1])), 5, (0, 255, 0), -1)
     cv2.imshow("Car and Closest Track Point", test_image)
     cv2.waitKey(0)
+
+
 
 
 
