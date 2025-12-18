@@ -16,8 +16,10 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
-from isaaclab.sensors import CameraCfg, TiledCameraCfg
+from isaaclab.sensors import TiledCameraCfg
 from isaaclab.actuators import ImplicitActuatorCfg
+
+from pxr import UsdShade
 
 from . import mdp
 from car_training.tasks.manager_based.car_training.mdp.rewards import get_total_reward
@@ -26,10 +28,11 @@ from car_training.tasks.manager_based.car_training.mdp.termination import off_tr
 
 import os
 from pathlib import Path
+
 PROJECT_ROOT = Path(__file__).parents[6].resolve()
-print(f"Project root: {PROJECT_ROOT}")
-usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/robot_assets/leatherback.usd")
-print(f"USD Path: {usd_path}")
+leatherback_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/robot_assets/leatherback.usd")
+track_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/scene_assets/")
+
 
 ## 
 # Leatherback Articulation Config
@@ -37,7 +40,7 @@ print(f"USD Path: {usd_path}")
 
 
 LEATHERBACK_CFG = ArticulationCfg(
-    spawn=sim_utils.UsdFileCfg(usd_path=usd_path,                       
+    spawn=sim_utils.UsdFileCfg(usd_path=leatherback_usd_path,                       
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             rigid_body_enabled=True,
             max_linear_velocity=10.0,
@@ -54,7 +57,7 @@ LEATHERBACK_CFG = ArticulationCfg(
         ),),
 
     init_state= ArticulationCfg.InitialStateCfg(
-        pos=(0.0, 0.0, 0.0),
+        pos=(0.0, -3.3, 0.01),
         rot=(0.0, 0.0, 0.0, 1.0),
         lin_vel=(0.0, 0.0, 0.0),
         ang_vel=(0.0, 0.0, 0.0),
@@ -103,22 +106,22 @@ class PlaneCfg(AssetBaseCfg):
     prim_path="/World/Plane"
     spawn: sim_utils.GroundPlaneCfg = sim_utils.GroundPlaneCfg(
         size=(1000.0, 1000.0),
-        visible=True,
+        visible=False,
     )
 
 
 @configclass
-class TrackCfg(AssetBaseCfg): # TODO: Currently not used
+class TrackCfg(AssetBaseCfg):
     """Per-env track configuration."""
     prim_path: str = "{ENV_REGEX_NS}/Track"
     spawn: sim_utils.UsdFileCfg = sim_utils.UsdFileCfg(
-        usd_path="source/car_training/car_training/tasks/manager_based/car_training/assets/track_assets/track.usd",
+        usd_path=track_usd_path + "tracks/track_0.usd", 
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             rigid_body_enabled=True,
-            max_linear_velocity=10.0,
-            max_angular_velocity=10.0,
-            max_depenetration_velocity=100.0,
-            enable_gyroscopic_forces=True,
+            max_linear_velocity=0.0,
+            max_angular_velocity=0.0,
+            max_depenetration_velocity=0.0,
+            enable_gyroscopic_forces=False,
         ),
     )
 
@@ -126,7 +129,7 @@ class TrackCfg(AssetBaseCfg): # TODO: Currently not used
 class OverheadCameraCfg(TiledCameraCfg):
     """Configuration for the per-env overhead camera."""
     prim_path: str = "{ENV_REGEX_NS}/OverheadCamera"
-    offset: TiledCameraCfg.OffsetCfg = TiledCameraCfg.OffsetCfg(pos=(0.0, 0.0, 1.0), rot=(0.7071, 0.0, 0.0, -0.7071), convention="opengl")
+    offset: TiledCameraCfg.OffsetCfg = TiledCameraCfg.OffsetCfg(pos=(0.0, 0.0, 10.0), rot=(0.7071, 0.0, 0.0, -0.7071), convention="opengl")
     data_types: list = ["rgb"]
     spawn: sim_utils.PinholeCameraCfg = sim_utils.PinholeCameraCfg(
         focal_length=18.14756,
@@ -134,8 +137,8 @@ class OverheadCameraCfg(TiledCameraCfg):
         horizontal_aperture=20.955,
         clipping_range=(0.01, 20.0)
     )
-    width: int = 96
-    height: int = 72
+    width: int = 84
+    height: int = 84
 
 
 @configclass
@@ -146,7 +149,7 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
     ground_plane: PlaneCfg = PlaneCfg()
 
     # track
-    #track: TrackCfg = TrackCfg()
+    track: TrackCfg = TrackCfg()
 
     # robot
     robot: ArticulationCfg = LEATHERBACK_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
@@ -248,10 +251,12 @@ class CommandCfg:
     """No command configuration for the MDP."""
     pass
 
+
 @configclass
 class CurriculumCfg:
     """Curriculum configuration for the MDP."""
     pass
+
 
 ##
 # Environment configuration
@@ -261,7 +266,7 @@ class CurriculumCfg:
 @configclass
 class CarTrainingEnvCfg(ManagerBasedRLEnvCfg):
     # Scene settings
-    scene: CarTrainingSceneCfg = CarTrainingSceneCfg(num_envs=2, env_spacing=5.0)
+    scene: CarTrainingSceneCfg = CarTrainingSceneCfg(num_envs=2, env_spacing=10.0)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
@@ -280,7 +285,8 @@ class CarTrainingEnvCfg(ManagerBasedRLEnvCfg):
         self.decimation = 2
         self.episode_length_s = 15
         # viewer settings
-        self.viewer.eye = (8.0, 0.0, 5.0)
+        self.viewer.eye = (0.0, 0.0, 40.0)
         # simulation settings
         self.sim.dt = 0.05
         self.sim.render_interval = self.decimation
+        # assign tracks to envs
