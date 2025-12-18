@@ -5,6 +5,9 @@ import os
 PROJECT_ROOT = Path(__file__).parents[8].resolve()
 TEST_DATA_PATH = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/mdp/utils/test_data/")
 
+if not os.path.exists(TEST_DATA_PATH):
+    os.makedirs(TEST_DATA_PATH)
+
 #### For all of the functions below, we compute reward for only a single copy of the simulation. If we have multiple copies running in parallel, we can call the functions below repeatedly, and that is what we do above. ####
 
 def find_track_points_from_image(image: np.ndarray, debug = False):
@@ -119,7 +122,6 @@ def __find_closest_track_point(car_center: tuple[float, float], track_points_lis
     :return: The closest track point to the car's center.
     :rtype: tuple[float, float]
     """
-    return (0.0, 0.0)  # Temporary return to avoid errors during testing
     if len(track_points_list) == 0:
         return (0.0, 0.0)  # Return a default value if the list is empty
 
@@ -259,7 +261,7 @@ def get_green_car_center(image, debug=False):
                 cv2.imwrite(f"{TEST_DATA_PATH}/debug_green_car_center.png", debug_image)
             return (cX, cY)
     
-    return None  # Car not found
+    return (0,0)  # Car not found
 
 
 
@@ -271,6 +273,15 @@ if __name__ == "__main__":
 
     track_points = find_track_points_from_image(test_image, debug=True)
     print(f"Number of track points detected: {len(track_points)}")
+
+    closest_point = __find_closest_track_point(car_center, track_points)
+    print(f"Closest track point to car center: {closest_point}")
+
+    cv2.circle(test_image, (int(closest_point[0]), int(closest_point[1])), 5, (0, 255, 0), -1)
+    cv2.imshow("Car and Closest Track Point", test_image)
+    cv2.waitKey(0)
+
+
 
 
 
