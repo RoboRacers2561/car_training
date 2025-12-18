@@ -33,8 +33,8 @@ def off_track_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> 
 
     off_track_flags = []
     for img in cam_data['rgb']:
-        cv2.imwrite("debug_termination_image.png", img)  # Save the image for debugging
-        print("Saved debug_termination_image.png")
+        # cv2.imwrite("debug_termination_image.png", img)  # Save the image for debugging
+        # print("Saved debug_termination_image.png")
         track_points_list = find_track_points_from_image(img)
         car_center = (0.0, 0.0)  # TODO: Need to get the car's center position
         off_track = is_off_track(car_center, track_points_list)

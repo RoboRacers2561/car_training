@@ -103,6 +103,7 @@ def __find_closest_track_point(car_center: tuple[float, float], track_points_lis
     :return: The closest track point to the car's center.
     :rtype: tuple[float, float]
     """
+    return (0.0, 0.0)  # Temporary return to avoid errors during testing
     if len(track_points_list) == 0:
         return (0.0, 0.0)  # Return a default value if the list is empty
 
@@ -153,6 +154,8 @@ def is_off_track(car_center: tuple[float, float], track_points_list: list[tuple[
     :return: True if the car is off track, False otherwise.
     :rtype: bool
     """
+    return False  # Temporary return tto avoid resetting all the time during testing
+    # print("Checking if car is off track...")
     if len(track_points_list) == 0:
         return True  # If there are no track points, consider the car off track
     closest_track_point = __find_closest_track_point(car_center, track_points_list)

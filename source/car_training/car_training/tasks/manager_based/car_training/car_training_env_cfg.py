@@ -6,6 +6,7 @@
 import math
 
 import isaaclab.sim as sim_utils
+from isaaclab.sim import SimulationCfg
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
 from isaaclab.managers import EventTermCfg as EventTerm
@@ -30,7 +31,7 @@ import os
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parents[6].resolve()
-leatherback_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/robot_assets/leatherback.usd")
+leatherback_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/robot_assets/leatherback_simple_better.usd")
 track_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/scene_assets/")
 
 
@@ -43,8 +44,8 @@ LEATHERBACK_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(usd_path=leatherback_usd_path,                       
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             rigid_body_enabled=True,
-            max_linear_velocity=10.0,
-            max_angular_velocity=10.0,
+            max_linear_velocity=100.0,
+            max_angular_velocity=100.0,
             max_depenetration_velocity=100.0,
             enable_gyroscopic_forces=True,
         ),
@@ -57,10 +58,10 @@ LEATHERBACK_CFG = ArticulationCfg(
         ),),
 
     init_state= ArticulationCfg.InitialStateCfg(
-        pos=(0.0, -3.3, 0.01),
-        rot=(0.0, 0.0, 0.0, 1.0),
-        lin_vel=(0.0, 0.0, 0.0),
-        ang_vel=(0.0, 0.0, 0.0),
+        pos=(0.0, -3.3, 1),
+        # rot=(0.0, 0.0, 0.0, 1.0),
+        # lin_vel=(0.0, 0.0, 0.0),
+        # ang_vel=(0.0, 0.0, 0.0),
         joint_pos={
             "Wheel__Knuckle__Front_Left": 0.0,
             "Wheel__Knuckle__Front_Right": 0.0,
@@ -68,16 +69,16 @@ LEATHERBACK_CFG = ArticulationCfg(
             "Wheel__Upright__Rear_Left": 0.0,
             "Knuckle__Upright__Front_Right": 0.0,
             "Knuckle__Upright__Front_Left": 0.0,
-            "Shock__Rear_Right": -0.03,
-            "Shock__Rear_Left":  -0.03,
-            "Shock__Front_Right": 0.03,
-            "Shock__Front_Left":  0.03,
+            # "Shock__Rear_Right": -0.03,
+            # "Shock__Rear_Left":  -0.03,
+            # "Shock__Front_Right": 0.03,
+            # "Shock__Front_Left":  0.03,
 
         },
     ),
     actuators={
         "throttle": ImplicitActuatorCfg(
-            joint_names_expr=["Wheel.*"],
+            joint_names_expr=["Wheel__Upright__Rear.*"],
             effort_limit=40000.0,
             velocity_limit=100.0,
             stiffness=0.0,
@@ -173,11 +174,11 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
 class ActionsCfg:
     """Action specifications for the MDP."""
 
-    # Throttle control for rear wheels (effort)
-    throttle = mdp.JointEffortActionCfg(
+    # Throttle control for rear wheels (velocity)
+    throttle = mdp.JointVelocityActionCfg(
         asset_name="robot",
-        joint_names=["Wheel__Upright__Rear_Left", "Wheel__Upright__Rear_Right"],
-        scale=100.0
+        joint_names=["Wheel__Upright__Rear_Right", "Wheel__Upright__Rear_Left"],
+        scale=1.0
     )
 
     # Steering control for front wheels (position)
@@ -289,4 +290,5 @@ class CarTrainingEnvCfg(ManagerBasedRLEnvCfg):
         # simulation settings
         self.sim.dt = 0.05
         self.sim.render_interval = self.decimation
+        self.sim.gravity = (0.0, 0.0, -9.81)
         # assign tracks to envs
