@@ -21,9 +21,10 @@ import numpy as np
 import cv2
 
 from car_training.tasks.manager_based.car_training.mdp.utils.helpers import *
+from car_training.tasks.manager_based.car_training.mdp.observation import robot_pos, robot_vel
 
 
-def get_total_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, completed_laps: int, total_laps: int, max_speed: float) -> torch.Tensor:
+def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_cfg: SceneEntityCfg, completed_laps: int, total_laps: int, max_speed: float) -> torch.Tensor:
     """
     Calculate the total reward based on multiple factors.
 
@@ -38,10 +39,10 @@ def get_total_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, complete
     :rtype: float
     """
     ###### Here I am blindly copying the code from the youtube video.
-    asset: Articulation = env.scene[asset_cfg.name]
+    camera: Articulation = env.scene[camera_cfg.name]
     
     cam_data = convert_dict_to_backend(
-                {k: v for k, v in asset.data.output.items()}, backend="numpy")
+                {k: v for k, v in camera.data.output.items()}, backend="numpy")
 
     # compute the reward
     #print(f"cam_data['rgb'].shape:{cam_data['rgb'].shape, type(cam_data['rgb'])}")
@@ -59,8 +60,11 @@ def get_total_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, complete
         # print("Saved debug_image.png")
         # for each copy of the simulation find the track points and compute the reward
         track_points_list = find_track_points_from_image(frames)
-        car_center = (10.0, 10.0) # TODO: Need to understand how to get the car's center position from the asset or env (potentially using a gps)
-        car_speed = robot_vel(env, asset_cfg).cpu().numpy()[0]  # Assuming single environment for simplicity
+        car_center = robot_pos(env, robot_cfg).cpu().numpy()[0] 
+        car_velocity = robot_vel(env, robot_cfg).cpu().numpy()[0]  
+        car_speed = np.linalg.norm(car_velocity)
+
+        print(f"Car center: {car_center}, Car velocity: {car_velocity}, Car speed: {car_speed}")
 
         # Now compute the reward for each simulation copy
         distance_reward = distance_from_center_reward(car_center, track_points_list, weight=2.0)
@@ -75,35 +79,3 @@ def get_total_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, complete
     total_reward = torch.tensor(all_rewards, dtype=torch.float32, device=env.device)
     return total_reward
 
-
-def robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
-    """
-    Calculate the (x, y) velocity of the car.
-
-    Args:
-        env: The environment instance.
-        asset_cfg: The configuration of the car asset.
-
-    Returns:
-        torch.Tensor: The velocity vector of the car.
-    """
-    asset: RigidObject = env.scene[asset_cfg.name]
-
-    return asset.data.root_lin_vel_b[:, :2]  # Return x, y velocity
-
-
-def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
-    """
-    Get the position of the car relative to the environment.
-
-    Args:
-        env: The environment instance.
-        asset_cfg: The configuration of the car asset.
-
-    Returns:
-        torch.Tensor: The position of the car.
-    """
-    asset: RigidObject = env.scene[asset_cfg.name]
-    relative_pos = asset.data.root_link_pos_w - env.scene.env_origins  # Relative to environment origin
-    return relative_pos[:, :2]  # Return x, y position
-    

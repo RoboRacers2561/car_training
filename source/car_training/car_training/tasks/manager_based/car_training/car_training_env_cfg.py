@@ -24,7 +24,7 @@ from pxr import UsdShade
 
 from . import mdp
 from car_training.tasks.manager_based.car_training.mdp.rewards import get_total_reward
-from car_training.tasks.manager_based.car_training.mdp.observation import gray_image, get_velocity
+from car_training.tasks.manager_based.car_training.mdp.observation import gray_image, robot_vel
 from car_training.tasks.manager_based.car_training.mdp.termination import off_track_termination
 
 import os
@@ -116,7 +116,7 @@ class TrackCfg(AssetBaseCfg):
     """Per-env track configuration."""
     prim_path: str = "{ENV_REGEX_NS}/Track"
     spawn: sim_utils.UsdFileCfg = sim_utils.UsdFileCfg(
-        usd_path=track_usd_path + "tracks/track_0.usd", 
+        usd_path=track_usd_path + "tracks/track_3.usd", 
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             rigid_body_enabled=True,
             max_linear_velocity=0.0,
@@ -130,7 +130,7 @@ class TrackCfg(AssetBaseCfg):
 class OverheadCameraCfg(TiledCameraCfg):
     """Configuration for the per-env overhead camera."""
     prim_path: str = "{ENV_REGEX_NS}/OverheadCamera"
-    offset: TiledCameraCfg.OffsetCfg = TiledCameraCfg.OffsetCfg(pos=(0.0, 0.0, 10.0), rot=(1.57, 0.0, 0.0, -0.7071), convention="opengl")
+    offset: TiledCameraCfg.OffsetCfg = TiledCameraCfg.OffsetCfg(pos=(0.0, 0.0, 8.66), rot=(1.57, 0.0, 0.0, -0.7071), convention="opengl")
     data_types: list = ["rgb"]
     spawn: sim_utils.PinholeCameraCfg = sim_utils.PinholeCameraCfg(
         focal_length=18.14756,
@@ -200,7 +200,7 @@ class ObservationsCfg:
         image = ObsTerm(func=gray_image,
                         params={"asset_cfg": SceneEntityCfg("overhead_camera")},
                         clip=(0.0, 255.0),)
-        joint_vel_rel = ObsTerm(func=get_velocity,
+        joint_vel_rel = ObsTerm(func=robot_vel,
                                 params={"asset_cfg": SceneEntityCfg("robot")},
                                 clip=(-10.0, 10.0),)
 
@@ -228,7 +228,8 @@ class RewardsCfg:
     total_reward = RewTerm(
         func=get_total_reward,
         params={
-            "asset_cfg": SceneEntityCfg("overhead_camera"),
+            "camera_cfg": SceneEntityCfg("overhead_camera"),
+            "robot_cfg": SceneEntityCfg("robot"),
             "completed_laps": 0,  # TODO: Replace with actual completed laps
             "total_laps": 3,      # TODO: Replace with actual total laps
             "max_speed": 10.0,    # TODO: Replace with actual max speed

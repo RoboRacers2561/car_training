@@ -12,10 +12,10 @@ import copy
 from math import sqrt
 import numpy as np
 from isaaclab.utils import convert_dict_to_backend
+from isaaclab.assets import RigidObject
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
-
 
 
 # For CNN approach: Grayscale image observation
@@ -41,45 +41,34 @@ def gray_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tenso
 
     return gray_imgs
 
-def get_velocity(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+
+def robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     """
-    Get the linear velocity of the car.
+    Calculate the (x, y) velocity of the car.
 
-    :return: Linear velocity tensor. Shape: (num_envs, 3).
-    :rtype: torch.Tensor
+    Args:
+        env: The environment instance.
+        asset_cfg: The configuration of the car asset.
+
+    Returns:
+        torch.Tensor: The velocity vector of the car.
     """
-    asset: Articulation = env.scene[asset_cfg.name]
-    
-    # vel_data = convert_dict_to_backend(
-    #             {k: v for k, v in asset.data.output.items()}, backend="torch")
+    asset: RigidObject = env.scene[asset_cfg.name]
 
-    # linear_vel_list = []
-    # for vel in vel_data['linear_velocity']:
-    #     linear_vel_list.append(copy.copy(vel))
+    relative_vel = asset.data.root_lin_vel_w[:, :2] # Return x, y velocity
+    return relative_vel
 
-    # linear_vels = torch.tensor(np.array(linear_vel_list), device=env.unwrapped.device, dtype=torch.float32)
-
-    # dummy for now
-    linear_vels = torch.zeros((env.num_envs, 2), device=env.unwrapped.device, dtype=torch.float32)
-
-    return linear_vels
-
-def get_car_center(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     """
-    Get the position of the car's center.
+    Get the position of the car relative to the environment.
 
-    :return: Position tensor. Shape: (num_envs, 3).
-    :rtype: torch.Tensor
+    Args:
+        env: The environment instance.
+        asset_cfg: The configuration of the car asset.
+
+    Returns:
+        torch.Tensor: The position of the car.
     """
-    asset: Articulation = env.scene[asset_cfg.name]
-    
-    pos_data = convert_dict_to_backend(
-                {k: v for k, v in asset.data.output.items()}, backend="torch")
-
-    position_list = []
-    for pos in pos_data['position']:
-        position_list.append(copy.copy(pos))
-
-    positions = torch.tensor(np.array(position_list), device=env.unwrapped.device, dtype=torch.float32)
-
-    return positions
+    asset: RigidObject = env.scene[asset_cfg.name]
+    relative_pos = asset.data.root_link_pos_w - env.scene.env_origins  # Relative to environment origin
+    return relative_pos[:, :2]  # Return x, y position
