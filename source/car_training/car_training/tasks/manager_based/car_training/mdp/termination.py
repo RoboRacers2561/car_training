@@ -12,7 +12,7 @@ from isaaclab.utils import convert_dict_to_backend
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
-from car_training.tasks.manager_based.car_training.mdp.rewards import is_off_track, find_track_points_from_image
+from car_training.tasks.manager_based.car_training.mdp.utils.helpers import is_off_track, find_track_points_from_image
 
 def off_track_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     """
@@ -36,7 +36,7 @@ def off_track_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> 
         cv2.imwrite("debug_termination_image.png", img)  # Save the image for debugging
         print("Saved debug_termination_image.png")
         track_points_list = find_track_points_from_image(img)
-        car_center = None  # TODO: Need to get the car's center position
+        car_center = (0.0, 0.0)  # TODO: Need to get the car's center position
         off_track = is_off_track(car_center, track_points_list)
         off_track_flags.append(off_track)
 
