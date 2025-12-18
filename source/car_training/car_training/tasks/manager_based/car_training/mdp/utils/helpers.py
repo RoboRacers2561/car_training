@@ -33,6 +33,13 @@ def find_track_points_from_image(image: np.ndarray, debug = False):
         for point in contour:
             track_points.append((point[0][0], point[0][1]))  # (x, y) format
 
+    # if debug draw the track points on the image
+    if debug:
+        debug_image = image.copy()
+        for point in track_points:
+            cv2.circle(debug_image, (int(point[0]), int(point[1])), 2, (0, 0, 255), -1)
+        cv2.imwrite(f"{TEST_DATA_PATH}/debug_track_points.png", debug_image)
+
     # Debugging: Save images if debug is True
     if debug:
         cv2.imwrite(f"{TEST_DATA_PATH}/debug_gray.png", gray)
@@ -138,7 +145,8 @@ def remains_alive_reward(weight=1.0):
     Returns:
         float: Constant reward value.
     """
-    return 1.0
+    reward = 1.0 * weight
+    return reward
 
 def is_off_track(car_center: tuple[float, float], track_points_list: list[tuple[float, float]], threshold_distance=5.0):
     """
@@ -188,11 +196,67 @@ def leaves_track_penalty(car_center: tuple[float, float], track_points_list: lis
         penalty = 0.0  # No penalty if the car is within the track limits
     return penalty
 
+def get_green_car_mask(image, debug=False):
+    """
+    Generate a mask for the green car in the image.
+
+    :param image: Input image from the car's camera.
+    :type image: np.ndarray
+
+    :return: Binary mask where the green car is detected.
+    :rtype: np.ndarray
+    """
+    # Convert to HSV color space
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+    # Define range for green color in HSV
+    lower_green = np.array([40, 80, 100])
+    upper_green = np.array([120, 255, 255])
+
+    # Create a mask for green color
+    mask = cv2.inRange(hsv, lower_green, upper_green)
+
+    # Debugging: Save mask image if debug is True
+    if debug:
+        cv2.imwrite(f"{TEST_DATA_PATH}/debug_green_car_mask.png", mask)
+
+    return mask
+
+def get_green_car_center(image, debug=False):
+    """
+    Detect the green car in the image and return its center coordinates.
+
+    :param image: Input image from the car's camera.
+    :type image: np.ndarray
+
+    :return: Center coordinates of the green car as (x, y) tuple. Returns None if the car is not found.
+    :rtype: tuple[float, float] | None
+    """
+    mask = get_green_car_mask(image, debug=debug)
+
+    # Find contours of the masked image
+    contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    if contours:
+        # Find the largest contour which will correspond to the car
+        largest_contour = max(contours, key=cv2.contourArea)
+        M = cv2.moments(largest_contour)
+        if M["m00"] != 0:
+            cX = int(M["m10"] / M["m00"])
+            cY = int(M["m01"] / M["m00"])
+            if debug:
+                debug_image = image.copy()
+                cv2.circle(debug_image, (cX, cY), 5, (255, 0, 0), -1)
+                cv2.imwrite(f"{TEST_DATA_PATH}/debug_green_car_center.png", debug_image)
+            return (cX, cY)
+    
+    return None  # Car not found
+
 
 
 
 if __name__ == "__main__":
-    test_image = cv2.imread("debug_termination_image.png")
-    track_points = find_track_points_from_image(test_image, debug=True)
-    print(f"Found {len(track_points)} track points.")
+    test_image = cv2.imread("debug_image_testing.png")
+    car_center = get_green_car_center(test_image, debug=True)
+    print(f"Detected green car center: {car_center}")
 

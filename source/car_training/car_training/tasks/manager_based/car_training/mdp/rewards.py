@@ -12,6 +12,7 @@ from isaaclab.assets import Articulation
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils.math import wrap_to_pi
 from isaaclab.utils import convert_dict_to_backend
+from isaaclab.assets import RigidObject
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
@@ -54,18 +55,18 @@ def get_total_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, complete
     all_rewards = []
     for frames in cam_data['rgb']:
         # print(f"frames.shape:{frames.shape, type(frames)}")
-        # cv2.imwrite("debug_image.png", frames)  # Save the image for debugging
+        cv2.imwrite("debug_image.png", frames)  # Save the image for debugging
         # print("Saved debug_image.png")
         # for each copy of the simulation find the track points and compute the reward
         track_points_list = find_track_points_from_image(frames)
         car_center = (10.0, 10.0) # TODO: Need to understand how to get the car's center position from the asset or env (potentially using a gps)
-        car_speed = 100 # TODO: Need to understand how to get the car's speed from the asset or env (potentially using a speedometer)
+        car_speed = robot_vel(env, asset_cfg).cpu().numpy()[0]  # Assuming single environment for simplicity
 
         # Now compute the reward for each simulation copy
-        distance_reward = distance_from_center_reward(car_center, track_points_list, weight=1.0)
-        velocity_reward_value = velocity_reward(car_speed, max_speed, weight=1.0)
-        alive_reward = remains_alive_reward()
-        track_penalty = leaves_track_penalty(car_center, track_points_list, weight=1.0)
+        distance_reward = distance_from_center_reward(car_center, track_points_list, weight=2.0)
+        velocity_reward_value = velocity_reward(car_speed, max_speed, weight=6.5)
+        alive_reward = remains_alive_reward(weight=0.2)
+        track_penalty = leaves_track_penalty(car_center, track_points_list, weight=2.0)
 
         total_reward = (distance_reward + velocity_reward_value + alive_reward - track_penalty)
 
@@ -75,4 +76,34 @@ def get_total_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, complete
     return total_reward
 
 
+def robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """
+    Calculate the (x, y) velocity of the car.
 
+    Args:
+        env: The environment instance.
+        asset_cfg: The configuration of the car asset.
+
+    Returns:
+        torch.Tensor: The velocity vector of the car.
+    """
+    asset: RigidObject = env.scene[asset_cfg.name]
+
+    return asset.data.root_lin_vel_b[:, :2]  # Return x, y velocity
+
+
+def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """
+    Get the position of the car relative to the environment.
+
+    Args:
+        env: The environment instance.
+        asset_cfg: The configuration of the car asset.
+
+    Returns:
+        torch.Tensor: The position of the car.
+    """
+    asset: RigidObject = env.scene[asset_cfg.name]
+    relative_pos = asset.data.root_link_pos_w - env.scene.env_origins  # Relative to environment origin
+    return relative_pos[:, :2]  # Return x, y position
+    

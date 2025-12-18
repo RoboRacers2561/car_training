@@ -130,7 +130,7 @@ class TrackCfg(AssetBaseCfg):
 class OverheadCameraCfg(TiledCameraCfg):
     """Configuration for the per-env overhead camera."""
     prim_path: str = "{ENV_REGEX_NS}/OverheadCamera"
-    offset: TiledCameraCfg.OffsetCfg = TiledCameraCfg.OffsetCfg(pos=(0.0, 0.0, 10.0), rot=(0.7071, 0.0, 0.0, -0.7071), convention="opengl")
+    offset: TiledCameraCfg.OffsetCfg = TiledCameraCfg.OffsetCfg(pos=(0.0, 0.0, 10.0), rot=(1.57, 0.0, 0.0, -0.7071), convention="opengl")
     data_types: list = ["rgb"]
     spawn: sim_utils.PinholeCameraCfg = sim_utils.PinholeCameraCfg(
         focal_length=18.14756,
@@ -138,8 +138,8 @@ class OverheadCameraCfg(TiledCameraCfg):
         horizontal_aperture=20.955,
         clipping_range=(0.01, 20.0)
     )
-    width: int = 84
-    height: int = 84
+    width: int = 512
+    height: int = 512
 
 
 @configclass
