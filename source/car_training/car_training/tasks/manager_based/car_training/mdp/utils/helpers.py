@@ -21,17 +21,28 @@ def find_track_points_from_image(image: np.ndarray, debug = False):
     # Convert to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # Apply Gaussian blur
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    # Edge detection using Canny
-    edges = cv2.Canny(blurred, 50, 150)
+    # Threshold (invert so line is white)
+    _, binary = cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY_INV)
+
+    # Optional: clean small noise
+    kernel = np.ones((3,3), np.uint8)
+    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
+
     # Find contours
-    contours, _ = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    
-    track_points = []
-    for contour in contours:
-        for point in contour:
-            track_points.append((point[0][0], point[0][1]))  # (x, y) format
+    contours, _ = cv2.findContours(
+        binary,
+        cv2.RETR_EXTERNAL,   # only outer contour
+        cv2.CHAIN_APPROX_NONE  # keep all points
+    )
+
+    # Select the largest contour
+    contour = max(contours, key=cv2.contourArea)
+
+    # Extract coordinates
+    track_points = contour.squeeze()  # shape (N, 2)
+
+    # print(track_points.shape)  # number of points
+    # print(track_points[:10])   # first 10 (x, y) points
 
     # if debug draw the track points on the image
     if debug:
@@ -43,8 +54,6 @@ def find_track_points_from_image(image: np.ndarray, debug = False):
     # Debugging: Save images if debug is True
     if debug:
         cv2.imwrite(f"{TEST_DATA_PATH}/debug_gray.png", gray)
-        cv2.imwrite(f"{TEST_DATA_PATH}/debug_blurred.png", blurred)
-        cv2.imwrite(f"{TEST_DATA_PATH}/debug_edges.png", edges)
         debug_contour_image = image.copy()
         cv2.drawContours(debug_contour_image, contours, -1, (0, 255, 0), 2)
         cv2.imwrite(f"{TEST_DATA_PATH}/debug_contours.png", debug_contour_image)
@@ -259,4 +268,9 @@ if __name__ == "__main__":
     test_image = cv2.imread("debug_image_testing.png")
     car_center = get_green_car_center(test_image, debug=True)
     print(f"Detected green car center: {car_center}")
+
+    track_points = find_track_points_from_image(test_image, debug=True)
+    print(f"Number of track points detected: {len(track_points)}")
+
+
 
