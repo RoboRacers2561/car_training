@@ -15,6 +15,7 @@ from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
+from isaaclab.managers import ActionTermCfg as ActionTermCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
 from isaaclab.sensors import TiledCameraCfg
@@ -26,6 +27,7 @@ from . import mdp
 from car_training.tasks.manager_based.car_training.mdp.rewards import get_total_reward
 from car_training.tasks.manager_based.car_training.mdp.observation import gray_image, robot_vel, track_neighborhood_image
 from car_training.tasks.manager_based.car_training.mdp.termination import off_track_termination
+from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSteerAckermannAction
 
 import os
 from pathlib import Path
@@ -174,18 +176,23 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
 class ActionsCfg:
     """Action specifications for the MDP."""
 
-    # Throttle control for rear wheels (velocity)
-    throttle = mdp.JointVelocityActionCfg(
-        asset_name="robot",
-        joint_names=["Wheel__Upright__Rear_Right", "Wheel__Upright__Rear_Left"],
-        scale=1.0
-    )
+    # # Throttle control for rear wheels (velocity)
+    # throttle = mdp.JointVelocityActionCfg(
+    #     asset_name="robot",
+    #     joint_names=["Wheel__Upright__Rear_Right", "Wheel__Upright__Rear_Left"],
+    #     scale=1.0
+    # )
 
-    # Steering control for front wheels (position)
-    steering = mdp.JointPositionActionCfg(
-        asset_name="robot",
-        joint_names=["Knuckle__Upright__Front_Right","Knuckle__Upright__Front_Left"],
-        scale=1.0
+    # # Steering control for front wheels (position)
+    # steering = mdp.JointPositionActionCfg(
+    #     asset_name="robot",
+    #     joint_names=["Knuckle__Upright__Front_Right","Knuckle__Upright__Front_Left"],
+    #     scale=1.0
+    # )
+
+    drive = ActionTermCfg(
+        class_type=ThrottleSteerAckermannAction,
+        asset_name="robot"
     )
 
 @configclass

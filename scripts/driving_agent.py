@@ -109,8 +109,8 @@ def main():
             # throttle is in rad/s, steering is steering angle of the front wheels in radians
 
             actions = torch.zeros(env.action_space.shape, device=env.unwrapped.device)
-            actions = set_throttle(actions, throttle_cmd, teleop.current_env_index)
-            actions = set_steering(actions, steer_cmd, teleop.current_env_index)
+            
+            actions = set_drive(actions, throttle_cmd, steer_cmd, teleop.current_env_index)
             
             # apply actions
             env.step(actions)
@@ -118,17 +118,11 @@ def main():
     # close the simulator
     env.close()
 
-def set_throttle(action, throttle_cmd, env_index):
-    """Set throttle commands in the action tensor."""
-    print(f"Setting throttle command: {throttle_cmd} for env index: {env_index}")
-    action[env_index, 0] = throttle_cmd
-    action[env_index, 1] = throttle_cmd
-    return action
 
-def set_steering(action, steer_cmd, env_index):
-    """Set steering commands in the action tensor."""
-    action[env_index, 2] = steer_cmd
-    action[env_index, 3] = steer_cmd
+def set_drive(action, throttle_cmd, steer_cmd, env_index):
+    """Set [throttle, steer] for one env."""
+    action[env_index, 0] = throttle_cmd   # throttle
+    action[env_index, 1] = steer_cmd      # steer (center/bicycle steering)
     return action
 
 if __name__ == "__main__":
