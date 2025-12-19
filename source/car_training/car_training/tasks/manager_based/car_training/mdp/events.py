@@ -34,10 +34,7 @@ def set_robot_visibility(env, visible: bool):
             UsdGeom.Imageable(prim).MakeInvisible()
 
 def init_static_track_image(env, camera_name = "overhead_camera", num_warmup_steps=3):
-    # env_ids must be present for internal calls
-    
-    # # grab your config object passed from EventTerm(params=...)
-    # camera_cfg: SceneEntityCfg = kwargs["camera_cfg"]
+
 
     # Initialize attribute once
     if not hasattr(env, "static_track_image"):
@@ -48,10 +45,16 @@ def init_static_track_image(env, camera_name = "overhead_camera", num_warmup_ste
     # hide robots so they don't appear
     set_robot_visibility(env, visible=False)
 
-    # step a couple frames to refresh render/camera buffers, but it might be safer to just render/update #TODO
-    actions = torch.zeros(env.action_space.shape, device=env.device)
+    # Render some new frames (avoiding using step)
     for _ in range(num_warmup_steps):
-        env.step(actions)
+        # env.step(actions)
+        # update scene buffers (including sensors) if available
+        if hasattr(env.scene, "update"):
+            env.scene.update(dt=0.0)
+
+        # render a frame so RTX sensors/cameras refresh
+        if hasattr(env.sim, "render"):
+            env.sim.render()
 
     rgb = env.scene[camera_name].data.output["rgb"]  # (num_envs, H, W, 3)
 

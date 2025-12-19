@@ -35,6 +35,7 @@ from isaaclab_tasks.utils import parse_env_cfg
 import car_training.tasks  # noqa: F401
 import carb
 import omni
+from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image
 
 class WasdTeleop:
     def __init__(self, throttle_speed=10.0, steer_angle=0.5, number_of_envs=1):
@@ -88,6 +89,9 @@ def main():
     print(f"[INFO]: Gym action space: {env.action_space}")
     # reset environment
     env.reset()
+
+    # initialize static track image
+    init_static_track_image(env.unwrapped, camera_name="overhead_camera", num_warmup_steps=3)
 
     print("Joint names:", env.unwrapped.scene["robot"].data.joint_names)
 
