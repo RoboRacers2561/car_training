@@ -15,7 +15,7 @@ from isaaclab.managers import SceneEntityCfg, ActionTermCfg
 REAR_WHEEL_NAMES = ["Wheel__Upright__Rear_Right", "Wheel__Upright__Rear_Left"]
 FRONT_STEER_NAMES = ["Knuckle__Upright__Front_Right", "Knuckle__Upright__Front_Left"]
 
-THROTTLE_SCALE = 1.0
+THROTTLE_SCALE = 20.0
 STEER_SCALE = 1.0
 MAX_STEER = 0.6  # rad
 
@@ -96,7 +96,11 @@ class ThrottleSteerAckermannAction(ActionTerm):
         """
         self._raw_actions = actions
 
-        throttle = actions[:, 0] * self.throttle_scale
+        # Map throttle from [-1, 1] → [0, 1]
+        throttle_norm = 0.5 * (actions[:, 0] + 1.0)
+        throttle = throttle_norm * self.throttle_scale
+
+
         steer = (actions[:, 1] * self.steer_scale).clamp(-self.max_steer, self.max_steer)
 
         # store as (num_envs, 2) again, but now processed

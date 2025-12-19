@@ -36,6 +36,7 @@ import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils import parse_env_cfg
 
 import car_training.tasks  # noqa: F401
+from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image
 
 
 def main():
@@ -52,6 +53,9 @@ def main():
     print(f"[INFO]: Gym action space: {env.action_space}")
     # reset environment
     env.reset()
+
+    # initialize static track image
+    init_static_track_image(env.unwrapped, camera_name="overhead_camera", num_warmup_steps=3)
     # simulate environment
     while simulation_app.is_running():
         # run everything in inference mode
