@@ -27,7 +27,7 @@ from . import mdp
 from car_training.tasks.manager_based.car_training.mdp.rewards import get_total_reward
 from car_training.tasks.manager_based.car_training.mdp.observation import gray_image, robot_vel
 from car_training.tasks.manager_based.car_training.mdp.termination import off_track_termination
-from mdp.actions import ThrottleSteerAckermannAction
+from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSteerAckermannAction
 
 import os
 from pathlib import Path
@@ -193,13 +193,13 @@ class ActionsCfg:
     drive = ActionTermCfg(
         class_type=ThrottleSteerAckermannAction,
         asset_name="robot",
-        rear_wheel_names=["Wheel__Upright__Rear_Right", "Wheel__Upright__Rear_Left"],
-        front_steer_names=["Knuckle__Upright__Front_Right", "Knuckle__Upright__Front_Left"],
-        wheelbase=0.32,        # <-- set to your car geometry
-        trackwidth=0.22,       # <-- set to your car geometry
-        throttle_scale=10.0,   # map [-1,1] -> wheel rad/s (example)
-        steer_scale=0.6,       # map [-1,1] -> radians (example)
-        max_steer=0.6,
+        # rear_wheel_names=["Wheel__Upright__Rear_Right", "Wheel__Upright__Rear_Left"],
+        # front_steer_names=["Knuckle__Upright__Front_Right", "Knuckle__Upright__Front_Left"],
+        # wheelbase=0.32,        # <-- set to your car geometry
+        # trackwidth=0.22,       # <-- set to your car geometry
+        # throttle_scale=10.0,   # map [-1,1] -> wheel rad/s (example)
+        # steer_scale=0.6,       # map [-1,1] -> radians (example)
+        # max_steer=0.6,
     )
 
 @configclass

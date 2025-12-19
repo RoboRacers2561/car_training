@@ -1,5 +1,15 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+
+if TYPE_CHECKING:
+    from isaaclab.envs import ManagerBasedRLEnv
 import torch
 from isaaclab.managers import ActionTerm
+
+from isaaclab.managers import SceneEntityCfg
+
 
 def ackermann_to_wheel_angles(delta_center: torch.Tensor,
                              wheelbase: float,
@@ -38,11 +48,11 @@ class ThrottleSteerAckermannAction(ActionTerm):
       - steer_cmd    -> ackermann left/right -> both front steering joints position targets
     """
 
-    def __init__(self, cfg, env):
+    def __init__(self, cfg: SceneEntityCfg, env: ManagerBasedRLEnv) -> None:
         super().__init__(cfg, env)
 
         # grab articulation handle
-        self.robot = env.scene[cfg.asset_name]
+        self.robot = env.scene[cfg.name]
 
         # cache joint indices
         self.rear_ids = self.robot.find_joints(cfg.rear_wheel_names)
