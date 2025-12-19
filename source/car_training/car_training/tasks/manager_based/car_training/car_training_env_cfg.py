@@ -24,7 +24,7 @@ from pxr import UsdShade
 
 from . import mdp
 from car_training.tasks.manager_based.car_training.mdp.rewards import get_total_reward
-from car_training.tasks.manager_based.car_training.mdp.observation import gray_image, robot_vel
+from car_training.tasks.manager_based.car_training.mdp.observation import gray_image, robot_vel, track_neighborhood_image
 from car_training.tasks.manager_based.car_training.mdp.termination import off_track_termination
 
 import os
@@ -197,12 +197,12 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        image = ObsTerm(func=gray_image,
-                        params={"asset_cfg": SceneEntityCfg("overhead_camera")},
+        image = ObsTerm(func=track_neighborhood_image,
+                        params={"asset_cfg": SceneEntityCfg("robot"),},
                         clip=(0.0, 255.0),)
         joint_vel_rel = ObsTerm(func=robot_vel,
                                 params={"asset_cfg": SceneEntityCfg("robot")},
-                                clip=(-10.0, 10.0),)
+                                clip=(-20.0, 20.0),)
 
         def __post_init__(self) -> None:
             self.enable_corruption = False
@@ -268,7 +268,7 @@ class CurriculumCfg:
 @configclass
 class CarTrainingEnvCfg(ManagerBasedRLEnvCfg):
     # Scene settings
-    scene: CarTrainingSceneCfg = CarTrainingSceneCfg(num_envs=2, env_spacing=10.0)
+    scene: CarTrainingSceneCfg = CarTrainingSceneCfg(num_envs=1, env_spacing=10.0)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
