@@ -103,8 +103,9 @@ def distance_from_center_reward(car_center: tuple[float, float], track_points_li
     """
     closest_track_point = __find_closest_track_point(car_center, track_points_list)
     distance = np.linalg.norm(np.array(car_center) - np.array(closest_track_point))
+    # print(f"Distance from center: {distance}")
     # Assuming a maximum distance for normalization, e.g., the width of the track
-    max_distance = 10.0  # This should be defined based on the track's characteristics
+    max_distance = 20.0  # This should be defined based on the track's characteristics
     normalized_distance = distance / max_distance
     # Reward is higher when the distance is smaller
     reward = 1.0 - normalized_distance
@@ -164,7 +165,7 @@ def remains_alive_reward(weight=1.0):
     return reward
 
 
-def is_off_track(car_center: tuple[float, float], track_points_list: list[tuple[float, float]], threshold_distance=5.0):
+def is_off_track(car_center: tuple[float, float], track_points_list: list[tuple[float, float]], threshold_distance=20.0):
     """
     Check if the car is off the track based on its distance from the closest track point.
 
@@ -178,7 +179,7 @@ def is_off_track(car_center: tuple[float, float], track_points_list: list[tuple[
     :return: True if the car is off track, False otherwise.
     :rtype: bool
     """
-    return False  # Temporary return tto avoid resetting all the time during testing
+    # return False  # Temporary return tto avoid resetting all the time during testing
     # print("Checking if car is off track...")
     if len(track_points_list) == 0:
         return True  # If there are no track points, consider the car off track

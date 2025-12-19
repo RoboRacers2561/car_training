@@ -52,20 +52,28 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
     # We can compute the reward for each copy separately and then combine them.
 
     all_rewards = []
-    for frames in cam_data['rgb']:
+    index = 0
+    # TODO: I added index here because the car_center is expected to be a tuple or list not a list[list], but I think 
+    # there is a better way to do this, especially since we are looping through all images, which is O(num_envs), maybe there
+    # is a way to vectorize this.
+    for frame in cam_data['rgb']:
         # print(f"frames.shape:{frames.shape, type(frames)}")
-        cv2.imwrite("debug_image.png", frames)  # Save the image for debugging
+        # cv2.imwrite("debug_image.png", frames)  # Save the image for debugging
         # print("Saved debug_image.png")
         # for each copy of the simulation find the track points and compute the reward
-        track_points_list = find_track_points_from_image(frames)
-        car_center = robot_pos(env, robot_cfg, do_convert_coords=True).cpu().numpy()
-        car_velocity = robot_vel(env, robot_cfg).cpu().numpy() 
+        track_points_list = find_track_points_from_image(frame)
+        car_center = robot_pos(env, robot_cfg, do_convert_coords=True).cpu().numpy()[index]
+        car_velocity = robot_vel(env, robot_cfg).cpu().numpy()[index]
         car_speed = np.linalg.norm(car_velocity)
 
-        #print(f"Car center: {car_center}, Car velocity: {car_velocity}, Car speed: {car_speed}")
+        # cv2.circle(frame, (int(car_center[0]), int(car_center[1])), 5, (0, 0, 255), -1)  # Draw car center in red
+        # cv2.imwrite(f"debug_image_with_car_center_{index}.png", frame)  # Save the image with car center for debugging
+        # print(f"type of car_center: {type(car_center)}, shape: {car_center.shape}")
+        # print(f"Car center: {car_center}, Car velocity: {car_velocity}, Car speed: {car_speed}")
 
         # Now compute the reward for each simulation copy
         distance_reward = distance_from_center_reward(car_center, track_points_list, weight=2.0)
+        # print(f"Distance reward: {distance_reward}")
         velocity_reward_value = velocity_reward(car_speed, max_speed, weight=6.5)
         alive_reward = remains_alive_reward(weight=0.2)
         track_penalty = leaves_track_penalty(car_center, track_points_list, weight=2.0)
@@ -73,6 +81,7 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
         total_reward = (distance_reward + velocity_reward_value + alive_reward - track_penalty)
 
         all_rewards.append(total_reward)
+        index += 1
 
     total_reward = torch.tensor(all_rewards, dtype=torch.float32, device=env.device)
     return total_reward

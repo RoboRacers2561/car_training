@@ -61,14 +61,12 @@ def robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor
 
 def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, do_convert_coords: bool = False) -> torch.Tensor:
     """
-    Get the position of the car relative to the environment.
+    Get the position of the car relative to the environment or convert to image coordinates.
 
-    Args:
-        env: The environment instance.
-        asset_cfg: The configuration of the car asset.
-
-    Returns:
-        torch.Tensor: The position of the car.
+    :param do_convert_coords: Whether to convert the coordinates to image space.
+    :type do_convert_coords: bool
+    :return: The (x, y) position of the car.
+    :rtype: torch.Tensor
     """
     asset: RigidObject = env.scene[asset_cfg.name]
     relative_pos = asset.data.root_link_pos_w - env.scene.env_origins  # Relative to environment origin
