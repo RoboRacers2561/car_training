@@ -18,7 +18,6 @@ from car_training.tasks.manager_based.car_training.mdp.utils.helpers import conv
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
-
 # For CNN approach: Grayscale image observation
 def gray_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     """
@@ -27,15 +26,26 @@ def gray_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tenso
     :return: Grayscale image tensor. Shape: (num_envs, 1, H, W), pixel values normalized to [0, 1].
     :rtype: torch.Tensor
     """
-    asset: Articulation = env.scene[asset_cfg.name]
+    # asset: Articulation = env.scene[asset_cfg.name]
     
-    cam_data = convert_dict_to_backend(
-                {k: v for k, v in asset.data.output.items()}, backend="numpy")
+    # cam_data = convert_dict_to_backend(
+    #             {k: v for k, v in asset.data.output.items()}, backend="numpy")
+
+    if hasattr(env.unwrapped, 'static_track_image') and env.unwrapped.static_track_image is not None:
+        # use the static track image saved in the env
+        cam_data = env.unwrapped.static_track_image.cpu().numpy() # type of cam_data is numpy array (num_envs, H, W, 3)
+    else:
+        # return a dummy image if static image is not available
+        num_envs = env.unwrapped.num_envs
+        H, W = 512, 512  # TODO: fix hardcoded values
+        print("static track image not found, returning dummy gray image")
+        return torch.zeros((num_envs, 1, H, W), device=env.unwrapped.device, dtype=torch.float32)
 
     gray_img_list = []
-    for img in cam_data['rgb']:
+    for img in cam_data:
         # Convert to grayscale using the luminosity method
         gray_img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        cv2.imwrite("debug_gray_image.png", gray_img)  # Save the grayscale image for debugging
         gray_img_list.append([copy.copy(gray_img)])
 
     gray_imgs = torch.tensor(np.array(gray_img_list), device=env.unwrapped.device, dtype=torch.float32) / 255.0 # here I am normalizing the pixel values to [0, 1], which is something the youtube video does not do.

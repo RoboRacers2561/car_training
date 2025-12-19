@@ -58,7 +58,7 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
     # is a way to vectorize this.
     for frame in cam_data['rgb']:
         # print(f"frames.shape:{frames.shape, type(frames)}")
-        # cv2.imwrite("debug_image.png", frames)  # Save the image for debugging
+        # cv2.imwrite("debug_image.png", frame)  # Save the image for debugging
         # print("Saved debug_image.png")
         # for each copy of the simulation find the track points and compute the reward
         track_points_list = find_track_points_from_image(frame)
