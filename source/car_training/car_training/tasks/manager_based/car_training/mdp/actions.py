@@ -8,8 +8,16 @@ if TYPE_CHECKING:
 import torch
 from isaaclab.managers import ActionTerm
 
-from isaaclab.managers import SceneEntityCfg
+from isaaclab.managers import SceneEntityCfg, ActionTermCfg
 
+
+
+REAR_WHEEL_NAMES = ["Wheel__Upright__Rear_Right", "Wheel__Upright__Rear_Left"]
+FRONT_STEER_NAMES = ["Knuckle__Upright__Front_Right", "Knuckle__Upright__Front_Left"]
+
+THROTTLE_SCALE = 1.0
+STEER_SCALE = 1.0
+MAX_STEER = 0.6  # rad
 
 def ackermann_to_wheel_angles(delta_center: torch.Tensor,
                              wheelbase: float,
@@ -48,26 +56,20 @@ class ThrottleSteerAckermannAction(ActionTerm):
       - steer_cmd    -> ackermann left/right -> both front steering joints position targets
     """
 
-    def __init__(self, cfg: SceneEntityCfg, env: ManagerBasedRLEnv) -> None:
+    def __init__(self, cfg: ActionTermCfg, env: ManagerBasedRLEnv) -> None:
         super().__init__(cfg, env)
 
         # grab articulation handle
-        self.robot = env.scene[cfg.name]
+        self.robot = env.scene[cfg.asset_name]
 
-        # # cache joint indices
-        # self.rear_ids = self.robot.find_joints(cfg.rear_wheel_names)
-        # self.front_ids = self.robot.find_joints(cfg.front_steer_names)
-
-        # # geometry (meters)
-        # self.wheelbase = float(cfg.wheelbase)
-        # self.trackwidth = float(cfg.trackwidth)
+        # cache joint indices
+        self.rear_ids, _ = self.robot.find_joints(REAR_WHEEL_NAMES)
+        self.front_ids, _ = self.robot.find_joints(FRONT_STEER_NAMES)
 
         # scaling / limits
-        self.throttle_scale = 1.0
-        self.steer_scale = 1.0
-        self.max_steer = 0.8
-
-        print(f"max steer: {self.max_steer}")
+        self.throttle_scale = THROTTLE_SCALE
+        self.steer_scale = STEER_SCALE
+        self.max_steer = MAX_STEER
 
         # Isaac Lab expects action dim known
         self._action_dim = 2
@@ -79,12 +81,33 @@ class ThrottleSteerAckermannAction(ActionTerm):
     def reset(self, env_ids=None):
         pass
 
-    def apply_action(self):
-        # actions: (num_envs, 2) = [throttle, steer]
-        a = self.actions
+    @property
+    def raw_actions(self) -> torch.Tensor:
+        return self._raw_actions
 
-        throttle = a[:, 0] * self.throttle_scale
-        steer = (a[:, 1] * self.steer_scale).clamp(-self.max_steer, self.max_steer)
+    @property
+    def processed_actions(self) -> torch.Tensor:
+        return self._processed_actions
+
+    def process_actions(self, actions: torch.Tensor):
+        """
+        actions: (num_envs, 2) coming from env.step(actions).
+        Store raw + processed (scaled/clipped).
+        """
+        self._raw_actions = actions
+
+        throttle = actions[:, 0] * self.throttle_scale
+        steer = (actions[:, 1] * self.steer_scale).clamp(-self.max_steer, self.max_steer)
+
+        # store as (num_envs, 2) again, but now processed
+        self._processed_actions = torch.stack([throttle, steer], dim=-1)
+    
+    def apply_actions(self):
+        # actions: (num_envs, 2) = [throttle, steer]
+        a = self._processed_actions
+
+        throttle = a[:, 0]
+        steer = a[:, 1]
 
         # Rear wheel velocities (same for both rear wheels)
         rear_vel = torch.stack([throttle, throttle], dim=-1)
