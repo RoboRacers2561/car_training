@@ -60,8 +60,8 @@ LEATHERBACK_CFG = ArticulationCfg(
         ),),
 
     init_state= ArticulationCfg.InitialStateCfg(
-        pos=(0.0, -3.3, 1),
-        # rot=(0.0, 0.0, 0.0, 1.0),
+        pos=(0.0, -3.3, 0.01),
+        rot=(0.0, 0.0, 0.0, 1.0),
         # lin_vel=(0.0, 0.0, 0.0),
         # ang_vel=(0.0, 0.0, 0.0),
         joint_pos={
@@ -128,6 +128,29 @@ class TrackCfg(AssetBaseCfg):
         ),
     )
 
+# @configclass
+# class TrackCfg(AssetBaseCfg):
+#     """Per-env track configuration."""
+
+#     prim_path: str = "{ENV_REGEX_NS}/Track"
+
+#     spawn: sim_utils.MultiUsdFileCfg = sim_utils.MultiAssetSpawnerCfg(
+#         usd_path=[
+#             track_usd_path + "tracks/track_0.usd",
+#             track_usd_path + "tracks/track_1.usd",
+#             track_usd_path + "tracks/track_2.usd",
+#             track_usd_path + "tracks/track_3.usd",
+#         ],
+#         random_choice=False,  # env_id % N assignment
+#         rigid_props=sim_utils.RigidBodyPropertiesCfg(
+#             rigid_body_enabled=True,
+#             max_linear_velocity=0.0,
+#             max_angular_velocity=0.0,
+#             max_depenetration_velocity=0.0,
+#             enable_gyroscopic_forces=False,
+#         ),
+#     )
+
 @configclass
 class OverheadCameraCfg(TiledCameraCfg):
     """Configuration for the per-env overhead camera."""
@@ -175,20 +198,6 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
 @configclass
 class ActionsCfg:
     """Action specifications for the MDP."""
-
-    # # Throttle control for rear wheels (velocity)
-    # throttle = mdp.JointVelocityActionCfg(
-    #     asset_name="robot",
-    #     joint_names=["Wheel__Upright__Rear_Right", "Wheel__Upright__Rear_Left"],
-    #     scale=1.0
-    # )
-
-    # # Steering control for front wheels (position)
-    # steering = mdp.JointPositionActionCfg(
-    #     asset_name="robot",
-    #     joint_names=["Knuckle__Upright__Front_Right","Knuckle__Upright__Front_Left"],
-    #     scale=1.0
-    # )
 
     drive = ActionTermCfg(
         class_type=ThrottleSteerAckermannAction,

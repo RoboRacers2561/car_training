@@ -72,6 +72,7 @@ def dump_pickle(file_path, data):
         pickle.dump(data, f)
 
 import isaaclab_tasks  # noqa: F401
+import car_training.tasks  # noqa: F401
 from isaaclab_tasks.utils.hydra import hydra_task_config
 
 import torch
@@ -99,7 +100,7 @@ class CustomMultiInputExtractor(BaseFeaturesExtractor):
         super().__init__(observation_space, features_dim)
 
         image_space = observation_space.spaces["image"]
-        vel_space = observation_space.spaces["base_lin_vel"]
+        vel_space = observation_space.spaces["joint_vel_rel"]
 
         # --- CNN with residual blocks ---
         self.cnn = nn.Sequential(
@@ -146,7 +147,7 @@ class CustomMultiInputExtractor(BaseFeaturesExtractor):
 
     def forward(self, observations):
         img = observations["image"]
-        vel = observations["base_lin_vel"]
+        vel = observations["joint_vel_rel"]
 
         img_features = self.image_fc(self.cnn(img))
         vel_features = self.vel_fc(vel)

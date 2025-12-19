@@ -43,7 +43,7 @@ def gray_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tenso
     for img in cam_data:
         # Convert to grayscale using the luminosity method
         gray_img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-        cv2.imwrite("debug_gray_image.png", gray_img)  # Save the grayscale image for debugging
+        #cv2.imwrite("debug_gray_image.png", gray_img)  # Save the grayscale image for debugging
         gray_img_list.append([copy.copy(gray_img)])
 
     gray_imgs = torch.tensor(np.array(gray_img_list), device=env.unwrapped.device, dtype=torch.float32) / 255.0 # here I am normalizing the pixel values to [0, 1], which is something the youtube video does not do.
