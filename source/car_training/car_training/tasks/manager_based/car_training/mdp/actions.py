@@ -54,18 +54,18 @@ class ThrottleSteerAckermannAction(ActionTerm):
         # grab articulation handle
         self.robot = env.scene[cfg.name]
 
-        # cache joint indices
-        self.rear_ids = self.robot.find_joints(cfg.rear_wheel_names)
-        self.front_ids = self.robot.find_joints(cfg.front_steer_names)
+        # # cache joint indices
+        # self.rear_ids = self.robot.find_joints(cfg.rear_wheel_names)
+        # self.front_ids = self.robot.find_joints(cfg.front_steer_names)
 
-        # geometry (meters)
-        self.wheelbase = float(cfg.wheelbase)
-        self.trackwidth = float(cfg.trackwidth)
+        # # geometry (meters)
+        # self.wheelbase = float(cfg.wheelbase)
+        # self.trackwidth = float(cfg.trackwidth)
 
         # scaling / limits
-        self.throttle_scale = float(getattr(cfg, "throttle_scale", 1.0))
-        self.steer_scale = float(getattr(cfg, "steer_scale", 1.0))
-        self.max_steer = float(getattr(cfg, "max_steer", 0.6))  # rad
+        self.throttle_scale = 1.0
+        self.steer_scale = 1.0
+        self.max_steer = 0.8
 
         print(f"max steer: {self.max_steer}")
 
@@ -80,24 +80,18 @@ class ThrottleSteerAckermannAction(ActionTerm):
         pass
 
     def apply_action(self):
-        # actions shape: (num_envs, 2)
+        # actions: (num_envs, 2) = [throttle, steer]
         a = self.actions
 
         throttle = a[:, 0] * self.throttle_scale
-        steer_center = (a[:, 1] * self.steer_scale).clamp(-self.max_steer, self.max_steer)
+        steer = (a[:, 1] * self.steer_scale).clamp(-self.max_steer, self.max_steer)
 
-        # Ackermann mapping
-        delta_left, delta_right = ackermann_to_wheel_angles(
-            steer_center, self.wheelbase, self.trackwidth
-        )
-
-        # Build target tensors
-        # Rear wheel velocities: (N,2)
+        # Rear wheel velocities (same for both rear wheels)
         rear_vel = torch.stack([throttle, throttle], dim=-1)
 
-        # Front steer positions: (N,2) order must match your joint list order
-        front_pos = torch.stack([delta_right, delta_left], dim=-1)  # adjust if your naming order differs
+        # Front steering angles (same for both front joints)
+        front_pos = torch.stack([steer, steer], dim=-1)  # order matches your front joint list
 
-        # Apply to articulation
+        # Apply
         self.robot.set_joint_velocity_target(rear_vel, joint_ids=self.rear_ids)
         self.robot.set_joint_position_target(front_pos, joint_ids=self.front_ids)
