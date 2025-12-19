@@ -13,6 +13,7 @@ from math import sqrt
 import numpy as np
 from isaaclab.utils import convert_dict_to_backend
 from isaaclab.assets import RigidObject
+from car_training.tasks.manager_based.car_training.mdp.utils.helpers import convert_coords
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
@@ -58,7 +59,7 @@ def robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor
     relative_vel = asset.data.root_lin_vel_w[:, :2] # Return x, y velocity
     return relative_vel
 
-def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, do_convert_coords: bool = False) -> torch.Tensor:
     """
     Get the position of the car relative to the environment.
 
@@ -71,4 +72,6 @@ def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor
     """
     asset: RigidObject = env.scene[asset_cfg.name]
     relative_pos = asset.data.root_link_pos_w - env.scene.env_origins  # Relative to environment origin
+    if do_convert_coords:
+        relative_pos = convert_coords(relative_pos, (10.0, 10.0), (512.0, 512.0))  # TODO: fix hardcoded values
     return relative_pos[:, :2]  # Return x, y position

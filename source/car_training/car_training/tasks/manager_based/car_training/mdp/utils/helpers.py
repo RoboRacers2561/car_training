@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 from pathlib import Path
 import os
+import torch
 PROJECT_ROOT = Path(__file__).parents[8].resolve()
 TEST_DATA_PATH = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/mdp/utils/test_data/")
 
@@ -271,20 +272,38 @@ def get_green_car_center(image, debug=False):
     return (0,0)  # Car not found
 
 
-def convert_coords(isaaclab_coords: tuple[float, float], isaaclab_dimensions: tuple[float, float], image_dimensions: tuple[float, float]) -> tuple[float, float]:
+def convert_coords(
+    isaaclab_coords: torch.Tensor,
+    isaaclab_dimensions: tuple[float, float],
+    image_dimensions: tuple[float, float],
+    device=None,
+    dtype=torch.float32
+) -> torch.Tensor:
     """
     Convert Isaaclab coordinates to image coordinates. 
     Isaaclab origin is at center, image origin is at top-left.
+    Accepts and returns torch tensors.
     """
-    x_isaaclab, y_isaaclab = isaaclab_coords
+    # Ensure input is a tensor
+    if not torch.is_tensor(isaaclab_coords):
+        isaaclab_coords = torch.tensor(isaaclab_coords, dtype=dtype, device=device)
+
     width_isaaclab, height_isaaclab = isaaclab_dimensions
     width_image, height_image = image_dimensions
+
+    # Unpack coordinates
+    x_isaaclab = isaaclab_coords[..., 0]
+    y_isaaclab = isaaclab_coords[..., 1]
 
     # Convert coordinates
     x_image = (x_isaaclab + width_isaaclab / 2) * (width_image / width_isaaclab)
     y_image = (height_isaaclab / 2 - y_isaaclab) * (height_image / height_isaaclab)
 
-    return (x_image, y_image)
+    # Stack and return as tensor
+    image_coords = torch.stack((x_image, y_image), dim=-1)
+    if device is not None:
+        image_coords = image_coords.to(device)
+    return image_coords.type(dtype)
 
 
 if __name__ == "__main__":

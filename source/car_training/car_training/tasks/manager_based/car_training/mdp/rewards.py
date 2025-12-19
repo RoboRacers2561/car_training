@@ -58,11 +58,11 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
         # print("Saved debug_image.png")
         # for each copy of the simulation find the track points and compute the reward
         track_points_list = find_track_points_from_image(frames)
-        car_center = robot_pos(env, robot_cfg).cpu().numpy()[0] 
-        car_velocity = robot_vel(env, robot_cfg).cpu().numpy()[0]  
+        car_center = robot_pos(env, robot_cfg, do_convert_coords=True).cpu().numpy()
+        car_velocity = robot_vel(env, robot_cfg).cpu().numpy() 
         car_speed = np.linalg.norm(car_velocity)
 
-        print(f"Car center: {car_center}, Car velocity: {car_velocity}, Car speed: {car_speed}")
+        #print(f"Car center: {car_center}, Car velocity: {car_velocity}, Car speed: {car_speed}")
 
         # Now compute the reward for each simulation copy
         distance_reward = distance_from_center_reward(car_center, track_points_list, weight=2.0)
