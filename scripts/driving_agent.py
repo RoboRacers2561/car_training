@@ -36,22 +36,21 @@ import car_training.tasks  # noqa: F401
 import carb
 import omni
 
-
-
-
 class WasdTeleop:
-    def __init__(self, throttle_speed=10.0, steer_angle=0.5):
+    def __init__(self, throttle_speed=10.0, steer_angle=0.5, number_of_envs=1):
         self.throttle_speed = float(throttle_speed)
         self.steer_angle = float(steer_angle)
+        self.number_of_envs = number_of_envs
+        self.current_env_index = 0
 
         self._input = carb.input.acquire_input_interface()
         self._keyboard = omni.appwindow.get_default_app_window().get_keyboard()
         self._sub = self._input.subscribe_to_keyboard_events(self._keyboard, self._on_event)
 
     def _on_event(self, e: carb.input.KeyboardEvent):
-        # KEY_PRESS / KEY_REPEAT => pressed, KEY_RELEASE => released
-        print(f"Key event: {e.input}, type: {e.type}")
-        # pressed = e.type in (carb.input.KeyboardEventType.KEY_PRESS, carb.input.KeyboardEventType.KEY_REPEAT)
+        # Only handle press (ignore release/char)
+        if e.type != carb.input.KeyboardEventType.KEY_PRESS:
+            return True
 
         if e.input == carb.input.KeyboardInput.W:
             print("Increasing throttle")
@@ -65,6 +64,11 @@ class WasdTeleop:
         elif e.input == carb.input.KeyboardInput.D:
             print("Decreasing steering angle to the right")
             self.steer_angle -= 0.1
+        elif e.input == carb.input.KeyboardInput.TAB:
+            print("Switching environment")
+            self.current_env_index = (self.current_env_index + 1) % self.number_of_envs
+            print(f"Current environment index: {self.current_env_index}")
+            
         return True  # keep receiving events
     
     def get(self):
@@ -86,25 +90,23 @@ def main():
     env.reset()
 
     print("Joint names:", env.unwrapped.scene["robot"].data.joint_names)
-    teleop = WasdTeleop(throttle_speed=10.0, steer_angle=0.5)
+
+    number_of_envs = env.unwrapped.num_envs
+    print(f"Number of environments: {number_of_envs}")
     
+    teleop = WasdTeleop(throttle_speed=10.0, steer_angle=0.5, number_of_envs=number_of_envs)
     # simulate environment
     while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():
-            # compute custom actions
-            # 0 = Rear left wheel effort, 1 = Rear right wheel effort,
-            # 2 = Front right steering angle, 3 = Front left steering angle
-            # Use small values first; scales are defined in the env cfg (100 for effort, 1 for steering)
-            # throttle_cmd = 10 # wheels velocity rad/s
-            # steer_cmd = 0.5      # front angle radians
 
             # get keyboard input
             throttle_cmd, steer_cmd = teleop.get()
+            # throttle is in rad/s, steering is steering angle of the front wheels in radians
 
             actions = torch.zeros(env.action_space.shape, device=env.unwrapped.device)
-            actions = set_throttle(actions, throttle_cmd)
-            actions = set_steering(actions, steer_cmd)
+            actions = set_throttle(actions, throttle_cmd, teleop.current_env_index)
+            actions = set_steering(actions, steer_cmd, teleop.current_env_index)
             
             # apply actions
             env.step(actions)
@@ -112,16 +114,17 @@ def main():
     # close the simulator
     env.close()
 
-def set_throttle(action, throttle_cmd):
+def set_throttle(action, throttle_cmd, env_index):
     """Set throttle commands in the action tensor."""
-    action[:, 0] = throttle_cmd
-    action[:, 1] = throttle_cmd
+    print(f"Setting throttle command: {throttle_cmd} for env index: {env_index}")
+    action[env_index, 0] = throttle_cmd
+    action[env_index, 1] = throttle_cmd
     return action
 
-def set_steering(action, steer_cmd):
+def set_steering(action, steer_cmd, env_index):
     """Set steering commands in the action tensor."""
-    action[:, 2] = steer_cmd
-    action[:, 3] = steer_cmd
+    action[env_index, 2] = steer_cmd
+    action[env_index, 3] = steer_cmd
     return action
 
 if __name__ == "__main__":
