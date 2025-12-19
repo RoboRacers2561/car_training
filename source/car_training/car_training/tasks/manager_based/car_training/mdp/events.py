@@ -33,7 +33,7 @@ def set_robot_visibility(env, visible: bool):
         else:
             UsdGeom.Imageable(prim).MakeInvisible()
 
-def init_static_track_image(env, camera_name = "overhead_camera", num_warmup_steps=3):
+def init_static_track_image(env, camera_name = "overhead_camera", num_warmup_steps=10):
 
 
     # Initialize attribute once

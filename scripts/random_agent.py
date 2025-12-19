@@ -55,7 +55,7 @@ def main():
     env.reset()
 
     # initialize static track image
-    init_static_track_image(env.unwrapped, camera_name="overhead_camera", num_warmup_steps=3)
+    init_static_track_image(env.unwrapped, camera_name="overhead_camera")
     # simulate environment
     while simulation_app.is_running():
         # run everything in inference mode

@@ -91,7 +91,7 @@ def main():
     env.reset()
 
     # initialize static track image
-    init_static_track_image(env.unwrapped, camera_name="overhead_camera", num_warmup_steps=3)
+    init_static_track_image(env.unwrapped, camera_name="overhead_camera")
 
     print("Joint names:", env.unwrapped.scene["robot"].data.joint_names)
 
