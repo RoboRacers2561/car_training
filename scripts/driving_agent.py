@@ -98,7 +98,7 @@ def main():
     number_of_envs = env.unwrapped.num_envs
     print(f"Number of environments: {number_of_envs}")
     
-    teleop = WasdTeleop(throttle_speed=10.0, steer_angle=0.5, number_of_envs=number_of_envs)
+    teleop = WasdTeleop(throttle_speed=1.0, steer_angle=0.5, number_of_envs=number_of_envs)
     # simulate environment
     while simulation_app.is_running():
         # run everything in inference mode

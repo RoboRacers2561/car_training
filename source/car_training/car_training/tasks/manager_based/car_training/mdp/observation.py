@@ -61,6 +61,7 @@ def track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) 
     Returns:
         crops: (N, 1, crop, crop) grayscale images
     """
+    H, W = 64, 64  # TODO: fix hardcoded values
 
     # TODO: remove attribute check - fix in env setup since this is not on gpu
     if hasattr(env.unwrapped, 'static_track_image') and env.unwrapped.static_track_image is not None:
@@ -69,7 +70,6 @@ def track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) 
     else:
         # return a dummy image if static image is not available
         num_envs = env.unwrapped.num_envs
-        H, W = 512, 512  # TODO: fix hardcoded values
         print("static track image not found, returning dummy gray image")
         return torch.zeros((num_envs, 1, H, W), device=env.unwrapped.device, dtype=torch.float32)
 
@@ -116,6 +116,13 @@ def track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) 
 
     # Convert to grayscale
     gray_crops = 0.2989 * crops[:, 0:1, :, :] + 0.5870 * crops[:, 1:2, :, :] + 0.1140 * crops[:, 2:3, :, :]  # (N, 1, crop, crop)
+
+    # print image shape for debugging
+    # print(f"track neighborhood image shape: {gray_crops.shape}")
+
+    # save debug image
+    # debug_img = gray_crops[0, 0].cpu().numpy() * 255.0
+    # cv2.imwrite("debug_track_neighborhood_image.png", debug_img)
 
     return gray_crops
 
