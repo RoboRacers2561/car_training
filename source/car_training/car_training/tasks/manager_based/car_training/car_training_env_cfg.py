@@ -260,7 +260,7 @@ class TerminationsCfg:
 
     # Out of bounds termination
     out_of_bounds = DoneTerm(func=off_track_termination, 
-                             params={"asset_cfg": SceneEntityCfg("overhead_camera"), "robot_cfg": SceneEntityCfg("robot")},)
+                             params={"asset_cfg": SceneEntityCfg("robot"),},)
 
 
 

@@ -19,7 +19,6 @@ from car_training.tasks.manager_based.car_training.mdp.utils.helpers import conv
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
-# TODO: Vectorize these functions to avoid for loops over num_envs
 
 # For CNN approach: Grayscale image observation
 def gray_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
@@ -29,6 +28,9 @@ def gray_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tenso
     :return: Grayscale image tensor. Shape: (num_envs, 1, H, W), pixel values normalized to [0, 1].
     :rtype: torch.Tensor
     """
+
+    # TODO: remove attribute check - fix in env setup since this is not on gpu
+    # TODO: vectorize this function
 
     if hasattr(env.unwrapped, 'static_track_image') and env.unwrapped.static_track_image is not None:
         # use the static track image saved in the env
@@ -57,7 +59,7 @@ def track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) 
     Vectorized GPU crop around the car using grid_sample.
 
     Returns:
-        crops: (N, 3, crop, crop) in [0, 1]
+        crops: (N, 1, crop, crop) grayscale images
     """
 
     # TODO: remove attribute check - fix in env setup since this is not on gpu
@@ -73,7 +75,6 @@ def track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) 
 
     device = env.unwrapped.device
 
-    # Static track image: (N, H, W, 3), assumed uint8 or float
     imgs = env.unwrapped.static_track_image
     N, H, W, _ = imgs.shape
     crop = 64
@@ -82,15 +83,12 @@ def track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) 
     if imgs.dtype != torch.float32:
         imgs = imgs.float() / 255.0
     imgs = imgs.permute(0, 3, 1, 2)  # (N, 3, H, W)
-
-    # Car positions in image pixel coordinates (N, 2)
     car_xy = robot_pos(env, asset_cfg, do_convert_coords=True)
 
     # Normalize to [-1, 1] for grid_sample
     cx = 2.0 * car_xy[:, 0] / (W - 1) - 1.0
     cy = 2.0 * car_xy[:, 1] / (H - 1) - 1.0
 
-    # Local crop grid centered at (0, 0)
     lin = torch.linspace(-1, 1, crop, device=device)
     dy, dx = torch.meshgrid(lin, lin, indexing="ij")
 
@@ -107,7 +105,7 @@ def track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) 
         dim=-1,
     )  # (N, crop, crop, 2)
 
-    # Sample with BORDER padding
+    # Sample with border padding
     crops = F.grid_sample(
         imgs,
         grid,
@@ -116,7 +114,10 @@ def track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) 
         align_corners=True,
     )  # (N, 3, crop, crop)
 
-    return crops
+    # Convert to grayscale
+    gray_crops = 0.2989 * crops[:, 0:1, :, :] + 0.5870 * crops[:, 1:2, :, :] + 0.1140 * crops[:, 2:3, :, :]  # (N, 1, crop, crop)
+
+    return gray_crops
 
 
 def robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:

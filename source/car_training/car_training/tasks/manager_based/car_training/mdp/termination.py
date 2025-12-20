@@ -13,35 +13,28 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 from car_training.tasks.manager_based.car_training.mdp.utils.helpers import is_off_track, find_track_points_from_image
-from car_training.tasks.manager_based.car_training.mdp.observation import robot_pos
+from car_training.tasks.manager_based.car_training.mdp.observation import robot_pos, track_neighborhood_image
 
-def off_track_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, robot_cfg: SceneEntityCfg) -> torch.Tensor:
+def off_track_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     """
-    Termination function that ends an episode if the car goes off track.
+    Vectorized termination function that ends an episode if the car goes off track.
 
     Args:
         env: The environment instance.
         state: The current state of the environment.
     Returns:
-
-        bool: True if the episode should terminate, False otherwise.
+        torch.Tensor: A tensor indicating which episodes should terminate.
     """
 
-    asset: Articulation = env.scene[asset_cfg.name]
-    
-    cam_data = convert_dict_to_backend(
-                {k: v for k, v in asset.data.output.items()}, backend="numpy")
+    # Get track neigborhborhood image & if not black pixels, terminate
+    track_imgs = track_neighborhood_image(env, asset_cfg)  # (N, 1, H, W)
+    gray_imgs = track_imgs.squeeze(1)  # (N, H, W)
+    # Check for black pixels
+    black_pixel_threshold = 0.12  # Define a threshold to consider a pixel as black
+    has_track_pixel = torch.any(
+        gray_imgs < black_pixel_threshold,
+        dim=(1, 2),
+    )
 
-    off_track_flags = []
-    index = 0
-    for img in cam_data['rgb']:
-        # cv2.imwrite("debug_termination_image.png", img)  # Save the image for debugging
-        # print("Saved debug_termination_image.png")
-        track_points_list = find_track_points_from_image(img)
-        car_center = robot_pos(env, robot_cfg, do_convert_coords=True).cpu().numpy()[index]
-        off_track = is_off_track(car_center, track_points_list)
-        off_track_flags.append(off_track)
-        index += 1
-
-    return torch.tensor(off_track_flags, device=env.unwrapped.device, dtype=torch.bool)
-    
+    off_track_flags = ~has_track_pixel
+    return off_track_flags
