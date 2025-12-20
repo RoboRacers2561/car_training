@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import torch
+
 from typing import TYPE_CHECKING
 
 import isaaclab.utils.math as math_utils
@@ -9,7 +9,8 @@ from isaaclab.managers import SceneEntityCfg
 
 import cv2
 import copy
-from math import sqrt
+import torch
+import torch.nn.functional as F
 import numpy as np
 from isaaclab.utils import convert_dict_to_backend
 from isaaclab.assets import RigidObject
@@ -53,12 +54,13 @@ def gray_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tenso
 
 def track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     """
-    Get a cropped image around the car from the overhead camera.
+    Vectorized GPU crop around the car using grid_sample.
 
-    :return: Cropped image tensor around the car. Shape: (num_envs, 3, crop_H, crop_W), pixel values normalized to [0, 1].
-    :rtype: torch.Tensor
+    Returns:
+        crops: (N, 3, crop, crop) in [0, 1]
     """
 
+    # TODO: remove attribute check - fix in env setup since this is not on gpu
     if hasattr(env.unwrapped, 'static_track_image') and env.unwrapped.static_track_image is not None:
         # use the static track image saved in the env
         cam_data = env.unwrapped.static_track_image.cpu().numpy() # type of cam_data is numpy array (num_envs, H, W, 3)
@@ -69,27 +71,52 @@ def track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) 
         print("static track image not found, returning dummy gray image")
         return torch.zeros((num_envs, 1, H, W), device=env.unwrapped.device, dtype=torch.float32)
 
-    # Get car positions in image coordinates
-    car_positions = robot_pos(env, asset_cfg, do_convert_coords=True).cpu().numpy()
-    cropped_img_list = []
-    crop_size = 64  # Define the size of the cropped image around the car
-    for i, img in enumerate(cam_data):
-        car_x, car_y = int(car_positions[i][0]), int(car_positions[i][1])
-        # Define crop boundaries
-        x_min = max(car_x - crop_size // 2, 0)
-        x_max = min(car_x + crop_size // 2, img.shape[1])
-        y_min = max(car_y - crop_size // 2, 0)
-        y_max = min(car_y + crop_size // 2, img.shape[0])
-        # Crop the image around the car
-        cropped_img = img[y_min:y_max, x_min:x_max, :]
-        # If the cropped image is smaller than the desired size (due to boundary conditions), pad it with white pixels
-        padded_img = np.ones((crop_size, crop_size, 3), dtype=cropped_img.dtype) * 255
-        padded_img[:cropped_img.shape[0], :cropped_img.shape[1], :] = cropped_img
-        cropped_img_list.append(padded_img)
-    cropped_imgs = torch.tensor(np.array(cropped_img_list), device=env.unwrapped.device, dtype=torch.float32) / 255.0
-    # Save one of the cropped images for debugging
-    # cv2.imwrite("debug_cropped_image.png", (cropped_imgs[0].cpu().numpy() * 255).astype(np.uint8))
-    return cropped_imgs
+    device = env.unwrapped.device
+
+    # Static track image: (N, H, W, 3), assumed uint8 or float
+    imgs = env.unwrapped.static_track_image
+    N, H, W, _ = imgs.shape
+    crop = 64
+
+    # Convert to float in [0, 1] and NCHW
+    if imgs.dtype != torch.float32:
+        imgs = imgs.float() / 255.0
+    imgs = imgs.permute(0, 3, 1, 2)  # (N, 3, H, W)
+
+    # Car positions in image pixel coordinates (N, 2)
+    car_xy = robot_pos(env, asset_cfg, do_convert_coords=True)
+
+    # Normalize to [-1, 1] for grid_sample
+    cx = 2.0 * car_xy[:, 0] / (W - 1) - 1.0
+    cy = 2.0 * car_xy[:, 1] / (H - 1) - 1.0
+
+    # Local crop grid centered at (0, 0)
+    lin = torch.linspace(-1, 1, crop, device=device)
+    dy, dx = torch.meshgrid(lin, lin, indexing="ij")
+
+    # Scale offsets to image size
+    dx = dx[None] * (crop / W)
+    dy = dy[None] * (crop / H)
+
+    # Shift grid to each car center
+    grid = torch.stack(
+        (
+            cx[:, None, None] + dx,
+            cy[:, None, None] + dy,
+        ),
+        dim=-1,
+    )  # (N, crop, crop, 2)
+
+    # Sample with BORDER padding
+    crops = F.grid_sample(
+        imgs,
+        grid,
+        mode="bilinear",
+        padding_mode="border",
+        align_corners=True,
+    )  # (N, 3, crop, crop)
+
+    return crops
 
 
 def robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
