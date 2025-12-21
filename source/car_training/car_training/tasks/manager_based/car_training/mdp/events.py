@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PIL import Image
-import torch
 import omni.usd
 from pxr import UsdGeom
 from isaacsim.core.utils.prims import get_prim_at_path
@@ -14,7 +13,7 @@ if TYPE_CHECKING:
 from isaaclab.managers import SceneEntityCfg
 
 
-def set_robot_visibility(env, visible: bool):
+def set_robot_visibility(env: ManagerBasedRLEnv, visible: bool):
     """
     Set the visibility of the robot in the simulation environment.
 
@@ -33,7 +32,7 @@ def set_robot_visibility(env, visible: bool):
         else:
             UsdGeom.Imageable(prim).MakeInvisible()
 
-def init_static_track_image(env, camera_name = "overhead_camera", num_warmup_steps=10):
+def init_static_track_image(env: ManagerBasedRLEnv, camera_name = "overhead_camera", num_warmup_steps=10):
 
 
     # Initialize attribute once
