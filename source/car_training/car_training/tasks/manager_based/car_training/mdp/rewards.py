@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 import numpy as np
 import cv2
+import logging
 
 from car_training.tasks.manager_based.car_training.mdp.utils.helpers import *
 from car_training.tasks.manager_based.car_training.mdp.observation import robot_pos, robot_vel
@@ -38,6 +39,10 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
     :return: Total reward calculated from various factors.
     :rtype: float
     """
+    logger: logging.Logger = env.unwrapped.logger
+    logger = logger.getChild(__name__)
+
+    logger.info("Calculating total reward...")
 
     camera: Articulation = env.scene[camera_cfg.name]
     
@@ -47,6 +52,8 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
     # compute the reward
 
     H, W, _ = cam_data['rgb'][0].shape
+    logger.debug(f"Camera image shape: H={H}, W={W}")
+    
 
     # Here I think we can have access to the sensors and images for each copy of the simulation.
     # We can compute the reward for each copy separately and then combine them.

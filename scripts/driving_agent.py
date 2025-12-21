@@ -32,10 +32,13 @@ import torch
 import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils import parse_env_cfg
 
+import logging
+
 import car_training.tasks  # noqa: F401
 import carb
 import omni
 from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image
+from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import setup_logger
 
 class WasdTeleop:
     def __init__(self, throttle_speed=10.0, steer_angle=0.5, number_of_envs=1):
@@ -83,6 +86,11 @@ def main():
     )
     # create environment
     env = gym.make(args_cli.task, cfg=env_cfg)
+
+    # setup logger
+    logger = setup_logger(task_name=args_cli.task, name="driving_agent_logger", console_level=logging.INFO, file_level=logging.DEBUG)
+
+    env.unwrapped.logger = logger
 
     # print info (this is vectorized environment)
     print(f"[INFO]: Gym observation space: {env.observation_space}")
