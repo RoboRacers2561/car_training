@@ -87,20 +87,24 @@ LEATHERBACK_CFG = ArticulationCfg(
 # Scene definition
 ##
 
-ground_place_params = GroundPlaceCfg()
+
 @configclass
 class PlaneCfg(AssetBaseCfg):
     """Ground Plane configuration."""
+    ground_plane_params = GroundPlaceCfg()
+
     prim_path="/World/Plane"
     spawn: sim_utils.GroundPlaneCfg = sim_utils.GroundPlaneCfg(
-        size=ground_place_params.size,
-        visible=ground_place_params.visible,
+        size=ground_plane_params.size,
+        visible=ground_plane_params.visible,
     )
 
-track_params = TrackParamsCfg()
+
 @configclass
 class TrackCfg(AssetBaseCfg):
     """Per-env track configuration."""
+    track_params = TrackParamsCfg()
+
     prim_path: str = "{ENV_REGEX_NS}/Track"
     spawn: sim_utils.UsdFileCfg = sim_utils.UsdFileCfg(
         usd_path=track_usd_path + "tracks/track_3.usd", 
@@ -136,10 +140,12 @@ class TrackCfg(AssetBaseCfg):
 #         ),
 #     )
 
-camera_params = OverheadCameraParamsCfg()
+
 @configclass
 class OverheadCameraCfg(TiledCameraCfg):
     """Configuration for the per-env overhead camera."""
+    camera_params = OverheadCameraParamsCfg()
+    
     prim_path: str = "{ENV_REGEX_NS}/OverheadCamera"
     offset: TiledCameraCfg.OffsetCfg = TiledCameraCfg.OffsetCfg(pos=camera_params.pose.pos, rot=camera_params.pose.rot, convention=camera_params.pose.convention)
     data_types: list = camera_params.image.data_types

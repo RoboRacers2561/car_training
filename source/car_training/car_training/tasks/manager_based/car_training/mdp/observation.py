@@ -12,10 +12,8 @@ import copy
 import torch
 import torch.nn.functional as F
 import numpy as np
-from isaaclab.utils import convert_dict_to_backend
 from isaaclab.assets import RigidObject
 from car_training.tasks.manager_based.car_training.mdp.utils.helpers import convert_coords
-
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
@@ -120,12 +118,10 @@ def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, do_convert_coor
     asset: RigidObject = env.scene[asset_cfg.name]
     relative_pos = asset.data.root_link_pos_w - env.scene.env_origins  # Relative to environment origin
 
-    # get static track image to determine image size
-    imgs = env.unwrapped.static_track_image
-    N, H, W, _ = imgs.shape
-
-    # get each env size in world units
+    track_size = env.cfg.scene.ground_plane.ground_plane_params.each_track_size
+    camera_width = env.cfg.scene.overhead_camera.camera_params.image.width
+    camera_height = env.cfg.scene.overhead_camera.camera_params.image.height
 
     if do_convert_coords:
-        relative_pos = convert_coords(relative_pos, (10.0, 10.0), (512.0, 512.0))  # TODO: fix hardcoded values
+        relative_pos = convert_coords(relative_pos, track_size, (camera_width, camera_height))
     return relative_pos[:, :2]  # Return x, y position
