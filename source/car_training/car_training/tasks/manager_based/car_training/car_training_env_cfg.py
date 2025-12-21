@@ -28,6 +28,7 @@ from car_training.tasks.manager_based.car_training.mdp.rewards import get_total_
 from car_training.tasks.manager_based.car_training.mdp.observation import gray_image, robot_vel, track_neighborhood_image
 from car_training.tasks.manager_based.car_training.mdp.termination import off_track_termination
 from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSteerAckermannAction
+from car_training.tasks.manager_based.car_training.configs.leatherback_params import LeatherbackParamsCfg
 
 import os
 from pathlib import Path
@@ -40,58 +41,44 @@ track_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/ta
 ## 
 # Leatherback Articulation Config
 ##
-
+leather_back_params = LeatherbackParamsCfg()
 
 LEATHERBACK_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(usd_path=leatherback_usd_path,                       
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
-            rigid_body_enabled=True,
-            max_linear_velocity=100.0,
-            max_angular_velocity=100.0,
-            max_depenetration_velocity=100.0,
-            enable_gyroscopic_forces=True,
+            rigid_body_enabled=leather_back_params.rigid_props.rigid_body_enabled,
+            max_linear_velocity=leather_back_params.rigid_props.max_linear_velocity,
+            max_angular_velocity=leather_back_params.rigid_props.max_angular_velocity,
+            max_depenetration_velocity=leather_back_params.rigid_props.max_depenetration_velocity,
+            enable_gyroscopic_forces=leather_back_params.rigid_props.enable_gyroscopic_forces,
         ),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-            enabled_self_collisions=False,
-            solver_position_iteration_count=4,
-            solver_velocity_iteration_count=0,
-            sleep_threshold=0.005,
-            stabilization_threshold=0.001,
+            enabled_self_collisions=leather_back_params.articulation_props.enabled_self_collisions,
+            solver_position_iteration_count=leather_back_params.articulation_props.solver_position_iteration_count,
+            solver_velocity_iteration_count=leather_back_params.articulation_props.solver_velocity_iteration_count,
+            sleep_threshold=leather_back_params.articulation_props.sleep_threshold,
+            stabilization_threshold=leather_back_params.articulation_props.stabilization_threshold,
         ),),
 
     init_state= ArticulationCfg.InitialStateCfg(
-        pos=(0.0, -3.3, 0.01),
-        rot=(0.0, 0.0, 0.0, 1.0),
-        # lin_vel=(0.0, 0.0, 0.0),
-        # ang_vel=(0.0, 0.0, 0.0),
-        joint_pos={
-            "Wheel__Knuckle__Front_Left": 0.0,
-            "Wheel__Knuckle__Front_Right": 0.0,
-            "Wheel__Upright__Rear_Right": 0.0,
-            "Wheel__Upright__Rear_Left": 0.0,
-            "Knuckle__Upright__Front_Right": 0.0,
-            "Knuckle__Upright__Front_Left": 0.0,
-            # "Shock__Rear_Right": -0.03,
-            # "Shock__Rear_Left":  -0.03,
-            # "Shock__Front_Right": 0.03,
-            # "Shock__Front_Left":  0.03,
-
-        },
+        pos=leather_back_params.init_state.pos,
+        rot=leather_back_params.init_state.rot,
+        joint_pos=leather_back_params.init_state.joint_pos,
     ),
     actuators={
         "throttle": ImplicitActuatorCfg(
-            joint_names_expr=["Wheel__Upright__Rear.*"],
-            effort_limit=40000.0,
-            velocity_limit=100.0,
-            stiffness=0.0,
-            damping=100000.0,
+            joint_names_expr=leather_back_params.actuators.throttle_joint_names_expr,
+            effort_limit=leather_back_params.actuators.throttle_effort_limit,
+            velocity_limit=leather_back_params.actuators.throttle_velocity_limit,
+            stiffness=leather_back_params.actuators.throttle_stiffness,
+            damping=leather_back_params.actuators.throttle_damping,
         ),
         "steering": ImplicitActuatorCfg(
-            joint_names_expr=["Knuckle__Upright__Front.*"],
-            effort_limit=40000.0,
-            velocity_limit=100.0,
-            stiffness=1000.0,
-            damping=0.0,
+            joint_names_expr=leather_back_params.actuators.steering_joint_names_expr,
+            effort_limit=leather_back_params.actuators.steering_effort_limit,
+            velocity_limit=leather_back_params.actuators.steering_velocity_limit,
+            stiffness=leather_back_params.actuators.steering_stiffness,
+            damping=leather_back_params.actuators.steering_damping,
         ),
     },
     
