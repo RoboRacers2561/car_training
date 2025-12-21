@@ -4,7 +4,7 @@ from isaaclab.utils import configclass
 @configclass
 class GroundPlaceCfg:
     size: tuple[float, float] = (1000.0, 1000.0)
-    visible : bool = True
+    visible : bool = False
 
 
 @configclass
