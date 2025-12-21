@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import torch
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from isaaclab.assets import Articulation
 from isaaclab.managers import SceneEntityCfg
@@ -24,6 +24,26 @@ import logging
 from car_training.tasks.manager_based.car_training.mdp.utils.helpers import *
 from car_training.tasks.manager_based.car_training.mdp.observation import robot_pos, robot_vel
 
+_LOGGER: Optional[logging.Logger] = None
+
+
+def get_logger(env: ManagerBasedRLEnv) -> logging.Logger:
+    """
+    Get a child logger of the project logger for the car_training.mdp.observation module.
+
+    :param env: The environment instance containing the base logger.
+    :type env: ManagerBasedRLEnv
+    
+    :return: Child logger for the observation module.
+    :rtype: logging.Logger
+    """
+    global _LOGGER # creating a cache to avoid repeated calls
+    if _LOGGER is None:
+        base = env.unwrapped.logger
+        short_name = ".".join(__name__.split(".")[-2:]) # car_training.mdp.observation
+        _LOGGER = base.getChild(short_name)
+    return _LOGGER
+
 
 def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_cfg: SceneEntityCfg, completed_laps: int, total_laps: int, max_speed: float) -> torch.Tensor:
     """
@@ -39,10 +59,9 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
     :return: Total reward calculated from various factors.
     :rtype: float
     """
-    logger: logging.Logger = env.unwrapped.logger
-    logger = logger.getChild(__name__)
+    logger = get_logger(env)
 
-    logger.info("Calculating total reward...")
+    logger.debug("Calculating total reward...")
 
     camera: Articulation = env.scene[camera_cfg.name]
     

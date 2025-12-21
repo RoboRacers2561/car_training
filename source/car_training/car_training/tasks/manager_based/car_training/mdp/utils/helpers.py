@@ -3,6 +3,7 @@ import cv2
 from pathlib import Path
 import os
 import torch
+import logging
 PROJECT_ROOT = Path(__file__).parents[8].resolve()
 TEST_DATA_PATH = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/mdp/utils/test_data/")
 
@@ -10,6 +11,8 @@ if not os.path.exists(TEST_DATA_PATH):
     os.makedirs(TEST_DATA_PATH)
 
 #### For all of the functions below, we compute reward for only a single copy of the simulation. If we have multiple copies running in parallel, we can call the functions below repeatedly, and that is what we do above. ####
+
+logger = logging.getLogger("car_training" + __name__.rpartition(".car_training")[-1])
 
 def find_track_points_from_image(image: np.ndarray, debug = False):
     """
@@ -45,8 +48,7 @@ def find_track_points_from_image(image: np.ndarray, debug = False):
     # Extract coordinates
     track_points = contour.squeeze()  # shape (N, 2)
 
-    # print(track_points.shape)  # number of points
-    # print(track_points[:10])   # first 10 (x, y) points
+    logger.debug(f"Number of track points detected: {len(track_points)}")
 
     # if debug draw the track points on the image
     if debug:
@@ -103,6 +105,7 @@ def distance_from_center_reward(car_center: tuple[float, float], track_points_li
     """
     closest_track_point = __find_closest_track_point(car_center, track_points_list)
     distance = np.linalg.norm(np.array(car_center) - np.array(closest_track_point))
+    logger.debug(f"Distance from center: {distance}")
     # print(f"Distance from center: {distance}")
     # Assuming a maximum distance for normalization, e.g., the width of the track
     max_distance = 20.0  # This should be defined based on the track's characteristics

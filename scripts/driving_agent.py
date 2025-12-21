@@ -88,7 +88,7 @@ def main():
     env = gym.make(args_cli.task, cfg=env_cfg)
 
     # setup logger
-    logger = setup_logger(task_name=args_cli.task, name="driving_agent_logger", console_level=logging.INFO, file_level=logging.DEBUG)
+    logger = setup_logger(task_name=args_cli.task, name="car_training", console_level=logging.INFO, file_level=logging.INFO)
 
     env.unwrapped.logger = logger
 

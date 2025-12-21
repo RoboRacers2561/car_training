@@ -31,8 +31,10 @@ def setup_logger(
     current_date = datetime.now().strftime("%Y-%m-%d")
     current_time = datetime.now().strftime("%H-%M-%S")
 
-    log_dir = os.path.join(PROJECT_ROOT, "logs/sb3", task_name, current_date)
+    log_dir = os.path.join(PROJECT_ROOT, "logs/sb3", task_name, "internal_logs", current_date)
     filename = f"{current_time}.log"
+
+    print( f"Logging to {os.path.join(log_dir, filename)}" )
 
 
     file_fmt = logging.Formatter(
@@ -57,5 +59,5 @@ def setup_logger(
         logger.addHandler(fh)
 
     logger._configured = True
-    logger.info("Logger initialized: %s (level=%s)", name)
+    logger.info("Logger initialized: %s ", name)
     return logger
