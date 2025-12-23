@@ -75,12 +75,16 @@ import isaaclab_tasks  # noqa: F401
 import car_training.tasks  # noqa: F401
 from isaaclab_tasks.utils.hydra import hydra_task_config
 
+import logging
+
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
 from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image
+from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import setup_logger
 
 class ResidualBlock(nn.Module):
     def __init__(self, channels):
@@ -203,6 +207,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # create isaac environment
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+
+    # setup logger
+    logger = setup_logger(task_name=args_cli.task, name="car_training", console_level=logging.INFO, file_level=logging.INFO)
+
+    env.unwrapped.logger = logger
 
     # convert to single-agent instance if required by the RL algorithm
     if isinstance(env.unwrapped, DirectMARLEnv):

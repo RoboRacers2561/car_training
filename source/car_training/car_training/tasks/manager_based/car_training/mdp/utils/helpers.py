@@ -3,6 +3,7 @@ import cv2
 from pathlib import Path
 import os
 import torch
+import logging
 PROJECT_ROOT = Path(__file__).parents[8].resolve()
 TEST_DATA_PATH = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/mdp/utils/test_data/")
 
@@ -10,6 +11,8 @@ if not os.path.exists(TEST_DATA_PATH):
     os.makedirs(TEST_DATA_PATH)
 
 #### For all of the functions below, we compute reward for only a single copy of the simulation. If we have multiple copies running in parallel, we can call the functions below repeatedly, and that is what we do above. ####
+
+logger = logging.getLogger("car_training" + __name__.rpartition(".car_training")[-1])
 
 def find_track_points_from_image(image: np.ndarray, debug = False):
     """
@@ -45,8 +48,7 @@ def find_track_points_from_image(image: np.ndarray, debug = False):
     # Extract coordinates
     track_points = contour.squeeze()  # shape (N, 2)
 
-    # print(track_points.shape)  # number of points
-    # print(track_points[:10])   # first 10 (x, y) points
+    logger.debug(f"Number of track points detected: {len(track_points)}")
 
     # if debug draw the track points on the image
     if debug:
@@ -103,6 +105,7 @@ def distance_from_center_reward(car_center: tuple[float, float], track_points_li
     """
     closest_track_point = __find_closest_track_point(car_center, track_points_list)
     distance = np.linalg.norm(np.array(car_center) - np.array(closest_track_point))
+    logger.debug(f"Distance from center: {distance}")
     # print(f"Distance from center: {distance}")
     # Assuming a maximum distance for normalization, e.g., the width of the track
     max_distance = 20.0  # This should be defined based on the track's characteristics
@@ -163,29 +166,6 @@ def remains_alive_reward(weight=1.0):
     """
     reward = 1.0 * weight
     return reward
-
-
-def is_off_track(car_center: tuple[float, float], track_points_list: list[tuple[float, float]], threshold_distance=20.0):
-    """
-    Check if the car is off the track based on its distance from the closest track point.
-
-    :param car_center: Tuple representing the car's center coordinates (x, y).
-    :type car_center: tuple[float, float]
-    :param track_points_list: List of tuples representing the track points (x, y).
-    :type track_points_list: list[tuple[float, float]]
-    :param threshold_distance: Distance threshold to determine if the car is off track.
-    :type threshold_distance: float
-
-    :return: True if the car is off track, False otherwise.
-    :rtype: bool
-    """
-    # return False  # Temporary return tto avoid resetting all the time during testing
-    # print("Checking if car is off track...")
-    if len(track_points_list) == 0:
-        return True  # If there are no track points, consider the car off track
-    closest_track_point = __find_closest_track_point(car_center, track_points_list)
-    distance = np.linalg.norm(np.array(car_center) - np.array(closest_track_point))
-    return distance > threshold_distance
 
 
 def leaves_track_penalty(car_center: tuple[float, float], track_points_list: list[tuple[float, float]], weight=1.0):

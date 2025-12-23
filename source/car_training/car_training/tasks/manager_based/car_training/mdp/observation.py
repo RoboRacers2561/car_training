@@ -12,47 +12,12 @@ import copy
 import torch
 import torch.nn.functional as F
 import numpy as np
-from isaaclab.utils import convert_dict_to_backend
 from isaaclab.assets import RigidObject
 from car_training.tasks.manager_based.car_training.mdp.utils.helpers import convert_coords
-
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
-
-# For CNN approach: Grayscale image observation
-def gray_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
-    """
-    Convert the RGB image from the camera sensor to grayscale. This observation space is used for the case where we want to use CNNs for processing the image input.
-
-    :return: Grayscale image tensor. Shape: (num_envs, 1, H, W), pixel values normalized to [0, 1].
-    :rtype: torch.Tensor
-    """
-
-    # TODO: remove attribute check - fix in env setup since this is not on gpu
-    # TODO: vectorize this function
-
-    if hasattr(env.unwrapped, 'static_track_image') and env.unwrapped.static_track_image is not None:
-        # use the static track image saved in the env
-        cam_data = env.unwrapped.static_track_image.cpu().numpy() # type of cam_data is numpy array (num_envs, H, W, 3)
-    else:
-        # return a dummy image if static image is not available
-        num_envs = env.unwrapped.num_envs
-        H, W = 512, 512  # TODO: fix hardcoded values
-        print("static track image not found, returning dummy gray image")
-        return torch.zeros((num_envs, 1, H, W), device=env.unwrapped.device, dtype=torch.float32)
-
-    gray_img_list = []
-    for img in cam_data:
-        # Convert to grayscale using the luminosity method
-        gray_img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-        #cv2.imwrite("debug_gray_image.png", gray_img)  # Save the grayscale image for debugging
-        gray_img_list.append([copy.copy(gray_img)])
-
-    gray_imgs = torch.tensor(np.array(gray_img_list), device=env.unwrapped.device, dtype=torch.float32) / 255.0 # here I am normalizing the pixel values to [0, 1], which is something the youtube video does not do.
-
-    return gray_imgs
-
+CROPPED_IMAGE_SIZE = 64
 
 def track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     """
@@ -61,7 +26,6 @@ def track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) 
     Returns:
         crops: (N, 1, crop, crop) grayscale images
     """
-    H, W = 64, 64  # TODO: fix hardcoded values
 
     # TODO: remove attribute check - fix in env setup since this is not on gpu
     if hasattr(env.unwrapped, 'static_track_image') and env.unwrapped.static_track_image is not None:
@@ -71,13 +35,12 @@ def track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) 
         # return a dummy image if static image is not available
         num_envs = env.unwrapped.num_envs
         print("static track image not found, returning dummy gray image")
-        return torch.zeros((num_envs, 1, H, W), device=env.unwrapped.device, dtype=torch.float32)
+        return torch.zeros((num_envs, 1, CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), device=env.unwrapped.device, dtype=torch.float32)
 
     device = env.unwrapped.device
 
     imgs = env.unwrapped.static_track_image
     N, H, W, _ = imgs.shape
-    crop = 64
 
     # Convert to float in [0, 1] and NCHW
     if imgs.dtype != torch.float32:
@@ -89,12 +52,12 @@ def track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) 
     cx = 2.0 * car_xy[:, 0] / (W - 1) - 1.0
     cy = 2.0 * car_xy[:, 1] / (H - 1) - 1.0
 
-    lin = torch.linspace(-1, 1, crop, device=device)
+    lin = torch.linspace(-1, 1, CROPPED_IMAGE_SIZE, device=device)
     dy, dx = torch.meshgrid(lin, lin, indexing="ij")
 
     # Scale offsets to image size
-    dx = dx[None] * (crop / W)
-    dy = dy[None] * (crop / H)
+    dx = dx[None] * (CROPPED_IMAGE_SIZE / W)
+    dy = dy[None] * (CROPPED_IMAGE_SIZE / H)
 
     # Shift grid to each car center
     grid = torch.stack(
@@ -154,6 +117,11 @@ def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, do_convert_coor
     """
     asset: RigidObject = env.scene[asset_cfg.name]
     relative_pos = asset.data.root_link_pos_w - env.scene.env_origins  # Relative to environment origin
+
+    track_size = env.cfg.scene.ground_plane.ground_plane_params.each_track_size
+    camera_width = env.cfg.scene.overhead_camera.camera_params.image.width
+    camera_height = env.cfg.scene.overhead_camera.camera_params.image.height
+
     if do_convert_coords:
-        relative_pos = convert_coords(relative_pos, (10.0, 10.0), (512.0, 512.0))  # TODO: fix hardcoded values
+        relative_pos = convert_coords(relative_pos, track_size, (camera_width, camera_height))
     return relative_pos[:, :2]  # Return x, y position

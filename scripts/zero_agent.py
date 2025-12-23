@@ -31,6 +31,7 @@ simulation_app = app_launcher.app
 
 import gymnasium as gym
 import torch
+import logging
 
 import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils import parse_env_cfg
@@ -38,6 +39,7 @@ from isaaclab_tasks.utils import parse_env_cfg
 import car_training.tasks  # noqa: F401
 
 from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image
+from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import setup_logger
 
 
 def main():
@@ -48,6 +50,11 @@ def main():
     )
     # create environment
     env = gym.make(args_cli.task, cfg=env_cfg)
+
+    # setup logger
+    logger = setup_logger(task_name=args_cli.task, name="car_training", console_level=logging.INFO, file_level=logging.INFO)
+
+    env.unwrapped.logger = logger
 
     # print info (this is vectorized environment)
     print(f"[INFO]: Gym observation space: {env.observation_space}")

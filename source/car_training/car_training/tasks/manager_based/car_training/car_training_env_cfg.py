@@ -3,10 +3,8 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-import math
 
 import isaaclab.sim as sim_utils
-from isaaclab.sim import SimulationCfg
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
 from isaaclab.managers import EventTermCfg as EventTerm
@@ -21,13 +19,14 @@ from isaaclab.utils import configclass
 from isaaclab.sensors import TiledCameraCfg
 from isaaclab.actuators import ImplicitActuatorCfg
 
-from pxr import UsdShade
-
 from . import mdp
 from car_training.tasks.manager_based.car_training.mdp.rewards import get_total_reward
-from car_training.tasks.manager_based.car_training.mdp.observation import gray_image, robot_vel, track_neighborhood_image
+from car_training.tasks.manager_based.car_training.mdp.observation import  robot_vel, track_neighborhood_image
 from car_training.tasks.manager_based.car_training.mdp.termination import off_track_termination
 from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSteerAckermannAction
+from car_training.tasks.manager_based.car_training.configs.leatherback_params import LeatherbackParamsCfg
+from car_training.tasks.manager_based.car_training.configs.plane_track_params import GroundPlaceCfg, TrackParamsCfg
+from car_training.tasks.manager_based.car_training.configs.overhead_camera_params import OverheadCameraParamsCfg
 
 import os
 from pathlib import Path
@@ -40,58 +39,44 @@ track_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/ta
 ## 
 # Leatherback Articulation Config
 ##
-
+leather_back_params = LeatherbackParamsCfg()
 
 LEATHERBACK_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(usd_path=leatherback_usd_path,                       
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
-            rigid_body_enabled=True,
-            max_linear_velocity=100.0,
-            max_angular_velocity=100.0,
-            max_depenetration_velocity=100.0,
-            enable_gyroscopic_forces=True,
+            rigid_body_enabled=leather_back_params.rigid_props.rigid_body_enabled,
+            max_linear_velocity=leather_back_params.rigid_props.max_linear_velocity,
+            max_angular_velocity=leather_back_params.rigid_props.max_angular_velocity,
+            max_depenetration_velocity=leather_back_params.rigid_props.max_depenetration_velocity,
+            enable_gyroscopic_forces=leather_back_params.rigid_props.enable_gyroscopic_forces,
         ),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-            enabled_self_collisions=False,
-            solver_position_iteration_count=4,
-            solver_velocity_iteration_count=0,
-            sleep_threshold=0.005,
-            stabilization_threshold=0.001,
+            enabled_self_collisions=leather_back_params.articulation_props.enabled_self_collisions,
+            solver_position_iteration_count=leather_back_params.articulation_props.solver_position_iteration_count,
+            solver_velocity_iteration_count=leather_back_params.articulation_props.solver_velocity_iteration_count,
+            sleep_threshold=leather_back_params.articulation_props.sleep_threshold,
+            stabilization_threshold=leather_back_params.articulation_props.stabilization_threshold,
         ),),
 
     init_state= ArticulationCfg.InitialStateCfg(
-        pos=(0.0, -3.3, 0.01),
-        rot=(0.0, 0.0, 0.0, 1.0),
-        # lin_vel=(0.0, 0.0, 0.0),
-        # ang_vel=(0.0, 0.0, 0.0),
-        joint_pos={
-            "Wheel__Knuckle__Front_Left": 0.0,
-            "Wheel__Knuckle__Front_Right": 0.0,
-            "Wheel__Upright__Rear_Right": 0.0,
-            "Wheel__Upright__Rear_Left": 0.0,
-            "Knuckle__Upright__Front_Right": 0.0,
-            "Knuckle__Upright__Front_Left": 0.0,
-            # "Shock__Rear_Right": -0.03,
-            # "Shock__Rear_Left":  -0.03,
-            # "Shock__Front_Right": 0.03,
-            # "Shock__Front_Left":  0.03,
-
-        },
+        pos=leather_back_params.init_state.pos,
+        rot=leather_back_params.init_state.rot,
+        joint_pos=leather_back_params.init_state.joint_pos,
     ),
     actuators={
         "throttle": ImplicitActuatorCfg(
-            joint_names_expr=["Wheel__Upright__Rear.*"],
-            effort_limit=40000.0,
-            velocity_limit=100.0,
-            stiffness=0.0,
-            damping=100000.0,
+            joint_names_expr=leather_back_params.actuators.throttle_joint_names_expr,
+            effort_limit=leather_back_params.actuators.throttle_effort_limit,
+            velocity_limit=leather_back_params.actuators.throttle_velocity_limit,
+            stiffness=leather_back_params.actuators.throttle_stiffness,
+            damping=leather_back_params.actuators.throttle_damping,
         ),
         "steering": ImplicitActuatorCfg(
-            joint_names_expr=["Knuckle__Upright__Front.*"],
-            effort_limit=40000.0,
-            velocity_limit=100.0,
-            stiffness=1000.0,
-            damping=0.0,
+            joint_names_expr=leather_back_params.actuators.steering_joint_names_expr,
+            effort_limit=leather_back_params.actuators.steering_effort_limit,
+            velocity_limit=leather_back_params.actuators.steering_velocity_limit,
+            stiffness=leather_back_params.actuators.steering_stiffness,
+            damping=leather_back_params.actuators.steering_damping,
         ),
     },
     
@@ -106,25 +91,29 @@ LEATHERBACK_CFG = ArticulationCfg(
 @configclass
 class PlaneCfg(AssetBaseCfg):
     """Ground Plane configuration."""
+    ground_plane_params = GroundPlaceCfg()
+
     prim_path="/World/Plane"
     spawn: sim_utils.GroundPlaneCfg = sim_utils.GroundPlaneCfg(
-        size=(1000.0, 1000.0),
-        visible=False,
+        size=ground_plane_params.size,
+        visible=ground_plane_params.visible,
     )
 
 
 @configclass
 class TrackCfg(AssetBaseCfg):
     """Per-env track configuration."""
+    track_params = TrackParamsCfg()
+
     prim_path: str = "{ENV_REGEX_NS}/Track"
     spawn: sim_utils.UsdFileCfg = sim_utils.UsdFileCfg(
         usd_path=track_usd_path + "tracks/track_3.usd", 
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
-            rigid_body_enabled=True,
-            max_linear_velocity=0.0,
-            max_angular_velocity=0.0,
-            max_depenetration_velocity=0.0,
-            enable_gyroscopic_forces=False,
+            rigid_body_enabled=track_params.rigid_props.rigid_body_enabled,
+            max_linear_velocity=track_params.rigid_props.max_linear_velocity,
+            max_angular_velocity=track_params.rigid_props.max_angular_velocity,
+            max_depenetration_velocity=track_params.rigid_props.max_depenetration_velocity,
+            enable_gyroscopic_forces=track_params.rigid_props.enable_gyroscopic_forces,
         ),
     )
 
@@ -151,20 +140,23 @@ class TrackCfg(AssetBaseCfg):
 #         ),
 #     )
 
+
 @configclass
 class OverheadCameraCfg(TiledCameraCfg):
     """Configuration for the per-env overhead camera."""
+    camera_params = OverheadCameraParamsCfg()
+    
     prim_path: str = "{ENV_REGEX_NS}/OverheadCamera"
-    offset: TiledCameraCfg.OffsetCfg = TiledCameraCfg.OffsetCfg(pos=(0.0, 0.0, 8.66), rot=(1.57, 0.0, 0.0, -0.7071), convention="opengl")
-    data_types: list = ["rgb"]
+    offset: TiledCameraCfg.OffsetCfg = TiledCameraCfg.OffsetCfg(pos=camera_params.pose.pos, rot=camera_params.pose.rot, convention=camera_params.pose.convention)
+    data_types: list = camera_params.image.data_types
     spawn: sim_utils.PinholeCameraCfg = sim_utils.PinholeCameraCfg(
-        focal_length=18.14756,
-        focus_distance=400.0,
-        horizontal_aperture=20.955,
-        clipping_range=(0.01, 20.0)
+        focal_length=camera_params.optics.focal_length,
+        focus_distance=camera_params.optics.focus_distance,
+        horizontal_aperture=camera_params.optics.horizontal_aperture,
+        clipping_range=camera_params.optics.clipping_range
     )
-    width: int = 512
-    height: int = 512
+    width: int = camera_params.image.width
+    height: int = camera_params.image.height
 
 
 @configclass
