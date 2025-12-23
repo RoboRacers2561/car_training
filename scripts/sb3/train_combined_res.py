@@ -26,6 +26,7 @@ parser.add_argument("--num_envs", type=int, default=None, help="Number of enviro
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
 parser.add_argument("--max_iterations", type=int, default=None, help="RL Policy training iterations.")
+parser.add_argument("--debug", action="store_true", default=False, help="Enable debug mode which will enable debug log level on internals.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -84,7 +85,6 @@ import torch.nn.functional as F
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
 from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image
-from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import setup_logger
 
 class ResidualBlock(nn.Module):
     def __init__(self, channels):
@@ -206,12 +206,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     n_timesteps = agent_cfg.pop("n_timesteps")
 
     # create isaac environment
-    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
-
-    # setup logger
-    logger = setup_logger(task_name=args_cli.task, name="car_training", console_level=logging.INFO, file_level=logging.INFO)
-
-    env.unwrapped.logger = logger
+    log_level = logging.DEBUG if args_cli.debug else logging.INFO
+    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None, task_name=args_cli.task, console_level=log_level, file_level=log_level)
 
     # convert to single-agent instance if required by the RL algorithm
     if isinstance(env.unwrapped, DirectMARLEnv):

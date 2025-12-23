@@ -15,6 +15,7 @@ parser.add_argument(
 )
 parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
+parser.add_argument("--debug", action="store_true", default=False, help="Enable debug mode.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -38,7 +39,6 @@ import car_training.tasks  # noqa: F401
 import carb
 import omni
 from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image
-from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import setup_logger
 
 class WasdTeleop:
     def __init__(self, throttle_speed=10.0, steer_angle=0.5, number_of_envs=1):
@@ -57,17 +57,17 @@ class WasdTeleop:
             return True
 
         if e.input == carb.input.KeyboardInput.W:
-            print("Increasing throttle")
             self.throttle_speed += 1 
+            print(f"setting throttle to {self.throttle_speed}")
         elif e.input == carb.input.KeyboardInput.S:
-            print("Decreasing throttle")
             self.throttle_speed -= 1
+            print(f"setting throttle to {self.throttle_speed}")
         elif e.input == carb.input.KeyboardInput.A:
-            print("Increasing steering angle to the left")
             self.steer_angle += 0.1
+            print(f"setting steer angle to {self.steer_angle}")
         elif e.input == carb.input.KeyboardInput.D:
-            print("Decreasing steering angle to the right")
             self.steer_angle -= 0.1
+            print(f"setting steer angle to {self.steer_angle}")
         elif e.input == carb.input.KeyboardInput.TAB:
             print("Switching environment")
             self.current_env_index = (self.current_env_index + 1) % self.number_of_envs
@@ -84,13 +84,9 @@ def main():
     env_cfg = parse_env_cfg(
         args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
     )
+    log_level = logging.DEBUG if args_cli.debug else logging.INFO
     # create environment
-    env = gym.make(args_cli.task, cfg=env_cfg)
-
-    # setup logger
-    logger = setup_logger(task_name=args_cli.task, name="car_training", console_level=logging.INFO, file_level=logging.INFO)
-
-    env.unwrapped.logger = logger
+    env = gym.make(args_cli.task, cfg=env_cfg, task_name=args_cli.task, console_level=log_level, file_level=log_level)
 
     # print info (this is vectorized environment)
     print(f"[INFO]: Gym observation space: {env.observation_space}")

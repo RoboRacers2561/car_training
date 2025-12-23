@@ -9,6 +9,7 @@ import torch
 from isaaclab.managers import ActionTerm
 
 from isaaclab.managers import SceneEntityCfg, ActionTermCfg
+from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import GpuSafeLogger
 
 
 
@@ -59,6 +60,8 @@ class ThrottleSteerAckermannAction(ActionTerm):
     def __init__(self, cfg: ActionTermCfg, env: ManagerBasedRLEnv) -> None:
         super().__init__(cfg, env)
 
+        self.logger: GpuSafeLogger = env.unwrapped.logger.getChild(self.__class__.__name__)
+
         # grab articulation handle
         self.robot = env.scene[cfg.asset_name]
 
@@ -71,8 +74,13 @@ class ThrottleSteerAckermannAction(ActionTerm):
         self.steer_scale = STEER_SCALE
         self.max_steer = MAX_STEER
 
+        self.logger.debug(f"Rear wheel joint IDs: {self.rear_ids}")
+        self.logger.debug(f"Front steer joint IDs: {self.front_ids}")
+        self.logger.debug(f"Throttle scale: {self.throttle_scale}, Steer scale: {self.steer_scale}, Max steer: {self.max_steer}")
+
         # Isaac Lab expects action dim known
         self._action_dim = 2
+        self.logger.debug(f"Action dimension: {self._action_dim}")
 
     @property
     def action_dim(self):
@@ -99,25 +107,29 @@ class ThrottleSteerAckermannAction(ActionTerm):
         # Map throttle from [-1, 1] → [0, 1]
         throttle_norm = 0.5 * (actions[:, 0] + 1.0)
         throttle = throttle_norm * self.throttle_scale
-
+        self.logger.debug_lazy("Processed throttle commands: %s", lambda: throttle)
 
         steer = (actions[:, 1] * self.steer_scale).clamp(-self.max_steer, self.max_steer)
-
+        self.logger.debug_lazy("Processed steer commands: %s", lambda: steer)
+        
         # store as (num_envs, 2) again, but now processed
         self._processed_actions = torch.stack([throttle, steer], dim=-1)
     
     def apply_actions(self):
         # actions: (num_envs, 2) = [throttle, steer]
+        self.logger.debug("In apply_actions()")
         a = self._processed_actions
 
         throttle = a[:, 0]
         steer = a[:, 1]
-
         # Rear wheel velocities (same for both rear wheels)
         rear_vel = torch.stack([throttle, throttle], dim=-1)
 
         # Front steering angles (same for both front joints)
         front_pos = torch.stack([steer, steer], dim=-1)  # order matches your front joint list
+
+        self.logger.debug_lazy("Rear wheel velocity targets: %s", lambda: rear_vel)
+        self.logger.debug_lazy("Front steering position targets: %s", lambda: front_pos)
 
         # Apply
         self.robot.set_joint_velocity_target(rear_vel, joint_ids=self.rear_ids)

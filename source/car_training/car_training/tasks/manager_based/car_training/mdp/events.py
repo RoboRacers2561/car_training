@@ -13,10 +13,12 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 from isaaclab.managers import SceneEntityCfg
 
-_LOGGER: Optional[logging.Logger] = None
+from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import GpuSafeLogger
+
+_LOGGER: Optional[GpuSafeLogger] = None
 
 
-def get_logger(env: ManagerBasedRLEnv) -> logging.Logger:
+def get_logger(env: ManagerBasedRLEnv) -> GpuSafeLogger:
     """
     Get a child logger of the project logger for the car_training.mdp.observation module.
 
@@ -24,7 +26,7 @@ def get_logger(env: ManagerBasedRLEnv) -> logging.Logger:
     :type env: ManagerBasedRLEnv
     
     :return: Child logger for the observation module.
-    :rtype: logging.Logger
+    :rtype: GpuSafeLogger
     """
     global _LOGGER # creating a cache to avoid repeated calls
     if _LOGGER is None:
