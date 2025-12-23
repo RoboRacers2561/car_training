@@ -16,14 +16,15 @@ import torch.nn.functional as F
 import numpy as np
 from isaaclab.assets import RigidObject
 from car_training.tasks.manager_based.car_training.mdp.utils.helpers import convert_coords
+from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import GpuSafeLogger
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 CROPPED_IMAGE_SIZE = 64
 
-_LOGGER: Optional[logging.Logger] = None
+_LOGGER: Optional[GpuSafeLogger] = None
 
-def get_logger(env: ManagerBasedRLEnv) -> logging.Logger:
+def get_logger(env: ManagerBasedRLEnv) -> GpuSafeLogger:
     """
     Get a child logger of the project logger for the car_training.mdp.observation module.
 
@@ -31,7 +32,7 @@ def get_logger(env: ManagerBasedRLEnv) -> logging.Logger:
     :type env: ManagerBasedRLEnv
     
     :return: Child logger for the observation module.
-    :rtype: logging.Logger
+    :rtype: GpuSafeLogger
     """
     global _LOGGER # creating a cache to avoid repeated calls
     if _LOGGER is None:
@@ -70,11 +71,11 @@ def track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) 
         imgs = imgs.float() / 255.0
     imgs = imgs.permute(0, 3, 1, 2)  # (N, 3, H, W)
     car_xy = robot_pos(env, asset_cfg, do_convert_coords=True)
+    logger.debug_lazy("Car positions (image coords): %s", lambda: car_xy)
 
     # Normalize to [-1, 1] for grid_sample
     cx = 2.0 * car_xy[:, 0] / (W - 1) - 1.0
     cy = 2.0 * car_xy[:, 1] / (H - 1) - 1.0
-    logger.debug(f"Car positions (image coords): cx={cx}, cy={cy}")
 
     lin = torch.linspace(-1, 1, CROPPED_IMAGE_SIZE, device=device)
     dy, dx = torch.meshgrid(lin, lin, indexing="ij")
@@ -82,7 +83,7 @@ def track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) 
     # Scale offsets to image size
     dx = dx[None] * (CROPPED_IMAGE_SIZE / W)
     dy = dy[None] * (CROPPED_IMAGE_SIZE / H)
-    logger.debug(f"Offset grid shape: dx={dx.shape}, dy={dy.shape}")
+    logger.debug(f"Crop offsets dx shape: {dx.shape}, dy shape: {dy.shape}")
 
     # Shift grid to each car center
     grid = torch.stack(
@@ -126,9 +127,11 @@ def robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor
     Returns:
         torch.Tensor: The velocity vector of the car.
     """
+    logger = get_logger(env)
     asset: RigidObject = env.scene[asset_cfg.name]
 
     relative_vel = asset.data.root_lin_vel_w[:, :2] # Return x, y velocity
+    logger.debug_lazy("Car velocities: %s", lambda: relative_vel)
     return relative_vel
 
 def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, do_convert_coords: bool = False) -> torch.Tensor:
@@ -140,13 +143,18 @@ def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, do_convert_coor
     :return: The (x, y) position of the car.
     :rtype: torch.Tensor
     """
+    logger = get_logger(env)
+
     asset: RigidObject = env.scene[asset_cfg.name]
     relative_pos = asset.data.root_link_pos_w - env.scene.env_origins  # Relative to environment origin
+    logger.debug_lazy("Car world positions: %s", lambda: relative_pos)
 
     track_size = env.cfg.scene.ground_plane.ground_plane_params.each_track_size
     camera_width = env.cfg.scene.overhead_camera.camera_params.image.width
     camera_height = env.cfg.scene.overhead_camera.camera_params.image.height
+    logger.debug(f"Track size: {track_size}, Camera width: {camera_width}, Camera height: {camera_height}")
 
     if do_convert_coords:
         relative_pos = convert_coords(relative_pos, track_size, (camera_width, camera_height))
+        logger.debug_lazy("Car image positions: %s", lambda: relative_pos)
     return relative_pos[:, :2]  # Return x, y position

@@ -23,11 +23,12 @@ import logging
 
 from car_training.tasks.manager_based.car_training.mdp.utils.helpers import *
 from car_training.tasks.manager_based.car_training.mdp.observation import robot_pos, robot_vel
+from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import GpuSafeLogger
 
-_LOGGER: Optional[logging.Logger] = None
+_LOGGER: Optional[GpuSafeLogger] = None
 
 
-def get_logger(env: ManagerBasedRLEnv) -> logging.Logger:
+def get_logger(env: ManagerBasedRLEnv) -> GpuSafeLogger:
     """
     Get a child logger of the project logger for the car_training.mdp.observation module.
 
@@ -35,7 +36,7 @@ def get_logger(env: ManagerBasedRLEnv) -> logging.Logger:
     :type env: ManagerBasedRLEnv
     
     :return: Child logger for the observation module.
-    :rtype: logging.Logger
+    :rtype: GpuSafeLogger
     """
     global _LOGGER # creating a cache to avoid repeated calls
     if _LOGGER is None:
@@ -107,6 +108,7 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
         total_reward = (distance_reward + velocity_reward_value + alive_reward - track_penalty)
 
         all_rewards.append(total_reward)
+        logger.debug(f"Simulation {index}: total_reward={total_reward}")
         index += 1
 
     total_reward = torch.tensor(all_rewards, dtype=torch.float32, device=env.device)

@@ -57,17 +57,17 @@ class WasdTeleop:
             return True
 
         if e.input == carb.input.KeyboardInput.W:
-            print("Increasing throttle")
             self.throttle_speed += 1 
+            print(f"setting throttle to {self.throttle_speed}")
         elif e.input == carb.input.KeyboardInput.S:
-            print("Decreasing throttle")
             self.throttle_speed -= 1
+            print(f"setting throttle to {self.throttle_speed}")
         elif e.input == carb.input.KeyboardInput.A:
-            print("Increasing steering angle to the left")
             self.steer_angle += 0.1
+            print(f"setting steer angle to {self.steer_angle}")
         elif e.input == carb.input.KeyboardInput.D:
-            print("Decreasing steering angle to the right")
             self.steer_angle -= 0.1
+            print(f"setting steer angle to {self.steer_angle}")
         elif e.input == carb.input.KeyboardInput.TAB:
             print("Switching environment")
             self.current_env_index = (self.current_env_index + 1) % self.number_of_envs

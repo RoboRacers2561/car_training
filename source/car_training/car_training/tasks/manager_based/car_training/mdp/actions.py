@@ -110,22 +110,26 @@ class ThrottleSteerAckermannAction(ActionTerm):
         self.logger.debug_lazy("Processed throttle commands: %s", lambda: throttle)
 
         steer = (actions[:, 1] * self.steer_scale).clamp(-self.max_steer, self.max_steer)
-
+        self.logger.debug_lazy("Processed steer commands: %s", lambda: steer)
+        
         # store as (num_envs, 2) again, but now processed
         self._processed_actions = torch.stack([throttle, steer], dim=-1)
     
     def apply_actions(self):
         # actions: (num_envs, 2) = [throttle, steer]
+        self.logger.debug("In apply_actions()")
         a = self._processed_actions
 
         throttle = a[:, 0]
         steer = a[:, 1]
-
         # Rear wheel velocities (same for both rear wheels)
         rear_vel = torch.stack([throttle, throttle], dim=-1)
 
         # Front steering angles (same for both front joints)
         front_pos = torch.stack([steer, steer], dim=-1)  # order matches your front joint list
+
+        self.logger.debug_lazy("Rear wheel velocity targets: %s", lambda: rear_vel)
+        self.logger.debug_lazy("Front steering position targets: %s", lambda: front_pos)
 
         # Apply
         self.robot.set_joint_velocity_target(rear_vel, joint_ids=self.rear_ids)
