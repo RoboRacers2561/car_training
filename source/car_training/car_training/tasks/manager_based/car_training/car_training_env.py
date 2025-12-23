@@ -12,7 +12,9 @@ from car_training.tasks.manager_based.car_training.mdp.utils.training_logging im
 class CarTrainingEnv(ManagerBasedRLEnv):
     cfg: CarTrainingEnvCfg
 
-    def __init__(self, cfg: CarTrainingEnvCfg, render_mode: str | None = None, **kwargs):
-        self.logger = setup_logger(task_name="Basic-Car-Training-v0", name="car_training", console_level=logging.INFO, file_level=logging.INFO) # I am setting up the logger before calling the super constructor to allow for logging in observations and actions
+    def __init__(self, cfg: CarTrainingEnvCfg, render_mode: str | None = None, task_name: str = "Unknown", console_level: int | None = logging.INFO,
+        file_level: int | None = logging.INFO, **kwargs):
+        
+        self.logger = setup_logger(task_name=task_name, name="car_training", console_level=console_level, file_level=file_level) # I am setting up the logger before calling the super constructor to allow for logging in observations and actions
 
         super().__init__(cfg, render_mode, **kwargs)

@@ -9,6 +9,7 @@ import torch
 from isaaclab.managers import ActionTerm
 
 from isaaclab.managers import SceneEntityCfg, ActionTermCfg
+import logging
 
 
 
@@ -59,6 +60,8 @@ class ThrottleSteerAckermannAction(ActionTerm):
     def __init__(self, cfg: ActionTermCfg, env: ManagerBasedRLEnv) -> None:
         super().__init__(cfg, env)
 
+        self.logger: logging.Logger = env.unwrapped.logger.getChild("car_training." + self.__class__.__name__)
+
         # grab articulation handle
         self.robot = env.scene[cfg.asset_name]
 
@@ -71,8 +74,13 @@ class ThrottleSteerAckermannAction(ActionTerm):
         self.steer_scale = STEER_SCALE
         self.max_steer = MAX_STEER
 
+        self.logger.debug(f"Rear wheel joint IDs: {self.rear_ids}")
+        self.logger.debug(f"Front steer joint IDs: {self.front_ids}")
+        self.logger.debug(f"Throttle scale: {self.throttle_scale}, Steer scale: {self.steer_scale}, Max steer: {self.max_steer}")
+
         # Isaac Lab expects action dim known
         self._action_dim = 2
+        self.logger.debug(f"Action dimension: {self._action_dim}")
 
     @property
     def action_dim(self):
@@ -99,8 +107,8 @@ class ThrottleSteerAckermannAction(ActionTerm):
         # Map throttle from [-1, 1] → [0, 1]
         throttle_norm = 0.5 * (actions[:, 0] + 1.0)
         throttle = throttle_norm * self.throttle_scale
-
-
+        self.logger.debug(f"Processed throttle commands: {throttle}")
+    
         steer = (actions[:, 1] * self.steer_scale).clamp(-self.max_steer, self.max_steer)
 
         # store as (num_envs, 2) again, but now processed

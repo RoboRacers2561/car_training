@@ -47,13 +47,10 @@ def main():
     env_cfg = parse_env_cfg(
         args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
     )
+    
+    log_level = logging.DEBUG if args_cli.debug else logging.INFO
     # create environment
-    env = gym.make(args_cli.task, cfg=env_cfg)
-
-    # setup logger
-    logger = setup_logger(task_name=args_cli.task, name="car_training", console_level=logging.INFO, file_level=logging.INFO)
-
-    env.unwrapped.logger = logger
+    env = gym.make(args_cli.task, cfg=env_cfg, task_name=args_cli.task, console_level=log_level, file_level=log_level)
 
     # print info (this is vectorized environment)
     print(f"[INFO]: Gym observation space: {env.observation_space}")
