@@ -14,7 +14,7 @@ from . import agents
 
 gym.register(
     id="Basic-Car-Training-v0",
-    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    entry_point="car_training.tasks.manager_based.car_training.car_training_env:CarTrainingEnv",
     disable_env_checker=True,
     kwargs={
         "env_cfg_entry_point": f"{__name__}.car_training_env_cfg:CarTrainingEnvCfg",

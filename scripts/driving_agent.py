@@ -88,9 +88,9 @@ def main():
     env = gym.make(args_cli.task, cfg=env_cfg)
 
     # setup logger
-    logger = setup_logger(task_name=args_cli.task, name="car_training", console_level=logging.INFO, file_level=logging.INFO)
+    # logger = setup_logger(task_name=args_cli.task, name="car_training", console_level=logging.INFO, file_level=logging.INFO)
 
-    env.unwrapped.logger = logger
+    # env.unwrapped.logger = logger
 
     # print info (this is vectorized environment)
     print(f"[INFO]: Gym observation space: {env.observation_space}")
