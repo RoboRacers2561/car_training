@@ -85,7 +85,6 @@ import torch.nn.functional as F
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
 from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image
-from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import setup_logger
 
 class ResidualBlock(nn.Module):
     def __init__(self, channels):

@@ -6,6 +6,7 @@ import os
 import sys
 from pathlib import Path
 from datetime import datetime
+from typing import Any, Callable, Optional
 
 PROJECT_ROOT = Path(__file__).parents[8].resolve()
 
@@ -61,3 +62,99 @@ def setup_logger(
     logger._configured = True
     logger.info("Logger initialized: %s ", name)
     return logger
+
+
+class GpuSafeLogger:
+    """
+    Thin wrapper around a standard logging.Logger.
+    Adds lazy debug helpers so GPU-derived values are only computed when DEBUG is enabled.
+
+    NOTE: Regular debug/info calls still evaluate args eagerly in Python.
+          Use debug_lazy()/debug_tensor_* helpers to avoid unwanted CUDA sync/transfers.
+    """
+
+    def __init__(self, base: logging.Logger):
+        self._base = base
+
+    # ---- Standard logger API passthroughs ----
+    @property
+    def name(self) -> str:
+        return self._base.name
+
+    def setLevel(self, level: int) -> None:
+        self._base.setLevel(level)
+
+    def isEnabledFor(self, level: int) -> bool:
+        return self._base.isEnabledFor(level)
+
+    def debug(self, msg: str, *args: Any, **kwargs: Any) -> None:
+        # Can't prevent eager evaluation of args; this is just passthrough.
+        self._base.debug(msg, *args, **kwargs)
+
+    def info(self, msg: str, *args: Any, **kwargs: Any) -> None:
+        self._base.info(msg, *args, **kwargs)
+
+    def warning(self, msg: str, *args: Any, **kwargs: Any) -> None:
+        self._base.warning(msg, *args, **kwargs)
+
+    def error(self, msg: str, *args: Any, **kwargs: Any) -> None:
+        self._base.error(msg, *args, **kwargs)
+
+    def exception(self, msg: str, *args: Any, **kwargs: Any) -> None:
+        self._base.exception(msg, *args, **kwargs)
+
+    def log(self, level: int, msg: str, *args: Any, **kwargs: Any) -> None:
+        self._base.log(level, msg, *args, **kwargs)
+
+    def getChild(self, suffix: str) -> "GpuSafeLogger":
+        return GpuSafeLogger(self._base.getChild(suffix))
+
+    # ---- GPU-safe helpers (lazy evaluation) ----
+    def debug_lazy(self, msg: str, fn: Callable[[], Any], *args_prefix: Any, **kwargs: Any) -> None:
+        """
+        Evaluate fn() only if DEBUG enabled. Useful for GPU->CPU scalars or expensive formatting.
+        - If fn() returns a tuple -> treated as additional format args.
+        - Else -> treated as a single additional format arg.
+        """
+        if not self._base.isEnabledFor(logging.DEBUG):
+            return
+
+        val = fn()
+        if isinstance(val, tuple):
+            self._base.debug(msg, *(args_prefix + val), **kwargs)
+        else:
+            self._base.debug(msg, *(args_prefix + (val,)), **kwargs)
+
+    def debug_tensor_stats(
+        self,
+        name: str,
+        t: Any,
+        every: Optional[int] = None,
+        step: Optional[int] = None,
+    ) -> None:
+        """
+        Debug-log mean/std/min/max of a tensor t safely (only when DEBUG enabled).
+        If every/step provided, only logs when step % every == 0.
+        """
+        if not self._base.isEnabledFor(logging.DEBUG):
+            return
+        if every is not None and step is not None and (step % every != 0):
+            return
+
+        # Compute lazily inside the enabled block to avoid sync when DEBUG disabled.
+        # Use .item() scalars only.
+        self._base.debug(
+            "%s: mean=%.4f std=%.4f min=%.4f max=%.4f shape=%s device=%s dtype=%s",
+            name,
+            t.mean().item(),
+            t.std().item(),
+            t.min().item(),
+            t.max().item(),
+            tuple(t.shape),
+            str(t.device),
+            str(t.dtype),
+        )
+
+    def __getattr__(self, item: str) -> Any:
+        # Forward everything else to the base logger (handlers, addHandler, etc.)
+        return getattr(self._base, item)

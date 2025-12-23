@@ -40,7 +40,6 @@ from isaaclab_tasks.utils import parse_env_cfg
 import car_training.tasks  # noqa: F401
 
 from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image
-from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import setup_logger
 
 
 def main():

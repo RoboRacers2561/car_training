@@ -9,7 +9,7 @@ import torch
 from isaaclab.managers import ActionTerm
 
 from isaaclab.managers import SceneEntityCfg, ActionTermCfg
-import logging
+from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import GpuSafeLogger
 
 
 
@@ -60,7 +60,7 @@ class ThrottleSteerAckermannAction(ActionTerm):
     def __init__(self, cfg: ActionTermCfg, env: ManagerBasedRLEnv) -> None:
         super().__init__(cfg, env)
 
-        self.logger: logging.Logger = env.unwrapped.logger.getChild("car_training." + self.__class__.__name__)
+        self.logger: GpuSafeLogger = env.unwrapped.logger.getChild(self.__class__.__name__)
 
         # grab articulation handle
         self.robot = env.scene[cfg.asset_name]
@@ -107,8 +107,8 @@ class ThrottleSteerAckermannAction(ActionTerm):
         # Map throttle from [-1, 1] → [0, 1]
         throttle_norm = 0.5 * (actions[:, 0] + 1.0)
         throttle = throttle_norm * self.throttle_scale
-        self.logger.debug(f"Processed throttle commands: {throttle}")
-    
+        self.logger.debug_lazy("Processed throttle commands: %s", lambda: throttle)
+
         steer = (actions[:, 1] * self.steer_scale).clamp(-self.max_steer, self.max_steer)
 
         # store as (num_envs, 2) again, but now processed

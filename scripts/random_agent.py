@@ -38,7 +38,6 @@ from isaaclab_tasks.utils import parse_env_cfg
 
 import car_training.tasks  # noqa: F401
 from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image
-from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import setup_logger
 
 
 def main():
@@ -47,7 +46,7 @@ def main():
     env_cfg = parse_env_cfg(
         args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
     )
-    
+
     log_level = logging.DEBUG if args_cli.debug else logging.INFO
     # create environment
     env = gym.make(args_cli.task, cfg=env_cfg, task_name=args_cli.task, console_level=log_level, file_level=log_level)
