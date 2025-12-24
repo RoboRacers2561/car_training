@@ -52,12 +52,11 @@ def track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) 
 
     # TODO: remove attribute check - fix in env setup since this is not on gpu
     if hasattr(env.unwrapped, 'static_track_image') and env.unwrapped.static_track_image is not None:
-        # use the static track image saved in the env
-        cam_data = env.unwrapped.static_track_image.cpu().numpy() # type of cam_data is numpy array (num_envs, H, W, 3)
+        pass
     else:
         # return a dummy image if static image is not available
         num_envs = env.unwrapped.num_envs
-        print("static track image not found, returning dummy gray image")
+        logger.warning("static track image not found, returning dummy gray image")
         return torch.zeros((num_envs, 1, CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), device=env.unwrapped.device, dtype=torch.float32)
 
     device = env.unwrapped.device
@@ -110,7 +109,7 @@ def track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) 
     # print(f"track neighborhood image shape: {gray_crops.shape}")
 
     # save debug image
-    # debug_img = gray_crops[0, 0].cpu().numpy() * 255.0
+    # debug_img = gray_crops[0, 0].cpu().numpy() * 255
     # cv2.imwrite("debug_track_neighborhood_image.png", debug_img)
 
     return gray_crops

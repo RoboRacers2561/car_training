@@ -92,6 +92,8 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
         car_center = robot_pos(env, robot_cfg, do_convert_coords=True).cpu().numpy()[index]
         car_velocity = robot_vel(env, robot_cfg).cpu().numpy()[index]
         car_speed = np.linalg.norm(car_velocity)
+        logger.debug(f"car_speed type: {type(car_speed)}")
+        logger.debug_lazy("car speed %s", lambda: car_speed)
 
         # cv2.circle(frame, (int(car_center[0]), int(car_center[1])), 5, (0, 0, 255), -1)  # Draw car center in red
         # cv2.imwrite(f"debug_image_with_car_center_{index}.png", frame)  # Save the image with car center for debugging
@@ -99,16 +101,16 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
         # print(f"Car center: {car_center}, Car velocity: {car_velocity}, Car speed: {car_speed}")
 
         # Now compute the reward for each simulation copy
-        distance_reward = distance_from_center_reward(car_center, track_points_list, weight=2.0)
+        distance_reward = distance_from_center_reward(car_center, track_points_list, weight=3.0)
         # print(f"Distance reward: {distance_reward}")
-        velocity_reward_value = velocity_reward(car_speed, max_speed, weight=6.5)
+        velocity_reward_value = velocity_reward(car_speed, max_speed, weight=1.5)
         alive_reward = remains_alive_reward(weight=0.2)
-        track_penalty = leaves_track_penalty(car_center, track_points_list, weight=2.0)
+        track_penalty = leaves_track_penalty(car_center, track_points_list, weight=0.5)
 
         total_reward = (distance_reward + velocity_reward_value + alive_reward - track_penalty)
 
         all_rewards.append(total_reward)
-        logger.debug(f"Simulation {index}: total_reward={total_reward}")
+        logger.debug(f"Simulation {index}: Distance Reward: {distance_reward}, Velocity Reward: {velocity_reward_value}, Alive Reward: {alive_reward}, Track Penalty: {track_penalty}, Total Reward: {total_reward}")
         index += 1
 
     total_reward = torch.tensor(all_rewards, dtype=torch.float32, device=env.device)

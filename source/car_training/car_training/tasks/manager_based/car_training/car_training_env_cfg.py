@@ -240,7 +240,7 @@ class RewardsCfg:
             "robot_cfg": SceneEntityCfg("robot"),
             "completed_laps": 0,  # TODO: Replace with actual completed laps
             "total_laps": 3,      # TODO: Replace with actual total laps
-            "max_speed": 10.0,    # TODO: Replace with actual max speed
+            "max_speed": 1,    # TODO: Replace with actual max speed
         },
         weight=1.0,
     )
@@ -292,7 +292,7 @@ class CarTrainingEnvCfg(ManagerBasedRLEnvCfg):
     def __post_init__(self) -> None:
         """Post initialization."""
         # general settings
-        self.decimation = 2
+        self.decimation = 2 # How many physics substeps the same action is applied for
         self.episode_length_s = 15
         # viewer settings
         self.viewer.eye = (0.0, 0.0, 40.0)

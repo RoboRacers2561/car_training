@@ -41,7 +41,7 @@ import omni
 from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image
 
 class WasdTeleop:
-    def __init__(self, throttle_speed=10.0, steer_angle=0.5, number_of_envs=1):
+    def __init__(self, throttle_speed=1.0, steer_angle=0.0, number_of_envs=1):
         self.throttle_speed = float(throttle_speed)
         self.steer_angle = float(steer_angle)
         self.number_of_envs = number_of_envs
@@ -102,7 +102,7 @@ def main():
     number_of_envs = env.unwrapped.num_envs
     print(f"Number of environments: {number_of_envs}")
     
-    teleop = WasdTeleop(throttle_speed=1.0, steer_angle=0.5, number_of_envs=number_of_envs)
+    teleop = WasdTeleop(throttle_speed=3.0, steer_angle=0.0, number_of_envs=number_of_envs)
     # simulate environment
     while simulation_app.is_running():
         # run everything in inference mode
