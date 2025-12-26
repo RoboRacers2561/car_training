@@ -14,6 +14,8 @@ if not os.path.exists(TEST_DATA_PATH):
 
 logger = logging.getLogger("car_training" + __name__.rpartition(".car_training")[-1])
 
+MAX_DISTANCE_FROM_LINE = 45
+
 def find_track_points_from_image(image: np.ndarray, debug = False):
     """
     Process the image to find track points.
@@ -108,14 +110,15 @@ def distance_from_center_reward(car_center: tuple[float, float], track_points_li
     logger.debug(f"Distance from center: {distance}")
     # print(f"Distance from center: {distance}")
     # Assuming a maximum distance for normalization, e.g., the width of the track
-    max_distance = 20.0  # This should be defined based on the track's characteristics
+    max_distance = MAX_DISTANCE_FROM_LINE  # This should be defined based on the track's characteristics
     normalized_distance = distance / max_distance
     # Reward is higher when the distance is smaller
     reward = 1.0 - normalized_distance
+    logger.debug(f"Distance from center reward before weight applied: {reward}")
     return reward * weight
 
 
-def __find_closest_track_point(car_center: tuple[float, float], track_points_list: list[tuple[float, float]], weight=1.0):
+def __find_closest_track_point(car_center: tuple[float, float], track_points_list: list[tuple[float, float]]):
     """
     Find the closest track point to the car's center. If the track points list is empty, return (0.0, 0.0).
     
@@ -123,8 +126,6 @@ def __find_closest_track_point(car_center: tuple[float, float], track_points_lis
     :type car_center: tuple[float, float]
     :param track_points_list: List of tuples representing the track points (x, y).
     :type track_points_list: list[tuple[float, float]]
-    :param weight: Weight for the reward.
-    :type weight: float
 
     :return: The closest track point to the car's center.
     :rtype: tuple[float, float]
@@ -134,7 +135,7 @@ def __find_closest_track_point(car_center: tuple[float, float], track_points_lis
 
     distances = [np.linalg.norm(np.array(car_center) - np.array(point)) for point in track_points_list]
     closest_index = np.argmin(distances)
-    return track_points_list[closest_index] * weight
+    return track_points_list[closest_index]
 
 
 def velocity_reward(car_speed: float, max_speed: float, weight=1.0):
@@ -150,6 +151,7 @@ def velocity_reward(car_speed: float, max_speed: float, weight=1.0):
     """
     normalized_speed = car_speed / max_speed
     # Reward is higher when the speed is closer to the maximum speed
+    logger.debug("velocity reward before weight %s", normalized_speed)
     reward = normalized_speed * weight
     return reward
 
@@ -182,13 +184,16 @@ def leaves_track_penalty(car_center: tuple[float, float], track_points_list: lis
     :return: Penalty value if the car leaves the track, otherwise 0.
     :rtype: float
     """
-    closest_track_point = __find_closest_track_point(car_center, track_points_list, weight)
+    closest_track_point = __find_closest_track_point(car_center, track_points_list)
     distance = np.linalg.norm(np.array(car_center) - np.array(closest_track_point))
+    logger.debug(f"Distance from center for leaves_track_penalty: {distance}")
     # Assuming a threshold distance to determine if the car is off track
-    threshold_distance = 5.0  # This should be defined based on the track's characteristics
+    threshold_distance = 35.0  # This should be defined based on the track's characteristics
     penalty = 0.0
     if distance > threshold_distance:
-        penalty = 1.0 - (distance / threshold_distance) * weight  # Normalize the penalty
+        logger.debug("Applying leaves track penalty")
+        penalty = 1.0 - (distance / MAX_DISTANCE_FROM_LINE) * weight  # Normalize the penalty
+        logger.debug(f"Leaves track penalty before max applied: {penalty}")
         penalty = max(penalty, 0.0)  # Ensure penalty is not negative
     else:
         penalty = 0.0  # No penalty if the car is within the track limits

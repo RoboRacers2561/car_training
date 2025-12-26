@@ -19,6 +19,8 @@ FRONT_STEER_NAMES = ["Knuckle__Upright__Front_Right", "Knuckle__Upright__Front_L
 THROTTLE_SCALE = 20.0
 STEER_SCALE = 1.0
 MAX_STEER = 0.6  # rad
+MAX_THROTTLE = 30
+MIN_THROTTLE = 10
 
 def ackermann_to_wheel_angles(delta_center: torch.Tensor,
                              wheelbase: float,
@@ -107,6 +109,7 @@ class ThrottleSteerAckermannAction(ActionTerm):
         # Map throttle from [-1, 1] → [0, 1]
         throttle_norm = 0.5 * (actions[:, 0] + 1.0)
         throttle = throttle_norm * self.throttle_scale
+        throttle = throttle.clamp(MIN_THROTTLE, MAX_THROTTLE)
         self.logger.debug_lazy("Processed throttle commands: %s", lambda: throttle)
 
         steer = (actions[:, 1] * self.steer_scale).clamp(-self.max_steer, self.max_steer)

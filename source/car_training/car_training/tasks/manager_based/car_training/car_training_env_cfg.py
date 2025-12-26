@@ -21,7 +21,7 @@ from isaaclab.actuators import ImplicitActuatorCfg
 
 from . import mdp
 from car_training.tasks.manager_based.car_training.mdp.rewards import get_total_reward
-from car_training.tasks.manager_based.car_training.mdp.observation import  robot_vel, track_neighborhood_image
+from car_training.tasks.manager_based.car_training.mdp.observation import  robot_vel, track_neighborhood_image, robot_heading
 from car_training.tasks.manager_based.car_training.mdp.termination import off_track_termination
 from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSteerAckermannAction
 from car_training.tasks.manager_based.car_training.configs.leatherback_params import LeatherbackParamsCfg
@@ -34,6 +34,12 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parents[6].resolve()
 leatherback_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/robot_assets/leatherback_simple_better.usd")
 track_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/scene_assets/")
+TRACK_USD_PATHS = [
+    track_usd_path + "tracks/track_0.usd",
+    track_usd_path + "tracks/track_1.usd",
+    track_usd_path + "tracks/track_2.usd",
+    track_usd_path + "tracks/track_3.usd",
+]
 
 
 ## 
@@ -106,8 +112,9 @@ class TrackCfg(AssetBaseCfg):
     track_params = TrackParamsCfg()
 
     prim_path: str = "{ENV_REGEX_NS}/Track"
-    spawn: sim_utils.UsdFileCfg = sim_utils.UsdFileCfg(
-        usd_path=track_usd_path + "tracks/track_3.usd", 
+    print("track prim path:", prim_path)
+    spawn: sim_utils.MultiUsdFileCfg = sim_utils.MultiUsdFileCfg(
+        usd_path=TRACK_USD_PATHS,
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             rigid_body_enabled=track_params.rigid_props.rigid_body_enabled,
             max_linear_velocity=track_params.rigid_props.max_linear_velocity,
@@ -115,31 +122,8 @@ class TrackCfg(AssetBaseCfg):
             max_depenetration_velocity=track_params.rigid_props.max_depenetration_velocity,
             enable_gyroscopic_forces=track_params.rigid_props.enable_gyroscopic_forces,
         ),
+        random_choice=False,  # env_id % N assignment
     )
-
-# @configclass
-# class TrackCfg(AssetBaseCfg):
-#     """Per-env track configuration."""
-
-#     prim_path: str = "{ENV_REGEX_NS}/Track"
-
-#     spawn: sim_utils.MultiUsdFileCfg = sim_utils.MultiAssetSpawnerCfg(
-#         usd_path=[
-#             track_usd_path + "tracks/track_0.usd",
-#             track_usd_path + "tracks/track_1.usd",
-#             track_usd_path + "tracks/track_2.usd",
-#             track_usd_path + "tracks/track_3.usd",
-#         ],
-#         random_choice=False,  # env_id % N assignment
-#         rigid_props=sim_utils.RigidBodyPropertiesCfg(
-#             rigid_body_enabled=True,
-#             max_linear_velocity=0.0,
-#             max_angular_velocity=0.0,
-#             max_depenetration_velocity=0.0,
-#             enable_gyroscopic_forces=False,
-#         ),
-#     )
-
 
 @configclass
 class OverheadCameraCfg(TiledCameraCfg):
@@ -162,6 +146,7 @@ class OverheadCameraCfg(TiledCameraCfg):
 @configclass
 class CarTrainingSceneCfg(InteractiveSceneCfg):
     """Configuration for a driving scene."""
+    replicate_physics: bool = False # for the tracks which are different we need to add this
 
     # ground plane
     ground_plane: PlaneCfg = PlaneCfg()
@@ -208,9 +193,9 @@ class ObservationsCfg:
         image = ObsTerm(func=track_neighborhood_image,
                         params={"asset_cfg": SceneEntityCfg("robot"),},
                         clip=(0.0, 255.0),)
-        joint_vel_rel = ObsTerm(func=robot_vel,
+        joint_vel_rel = ObsTerm(func=robot_heading,
                                 params={"asset_cfg": SceneEntityCfg("robot")},
-                                clip=(-20.0, 20.0),)
+                                )
 
         def __post_init__(self) -> None:
             self.enable_corruption = False
@@ -240,7 +225,7 @@ class RewardsCfg:
             "robot_cfg": SceneEntityCfg("robot"),
             "completed_laps": 0,  # TODO: Replace with actual completed laps
             "total_laps": 3,      # TODO: Replace with actual total laps
-            "max_speed": 10.0,    # TODO: Replace with actual max speed
+            "max_speed": 1,    # TODO: Replace with actual max speed
         },
         weight=1.0,
     )
@@ -292,7 +277,7 @@ class CarTrainingEnvCfg(ManagerBasedRLEnvCfg):
     def __post_init__(self) -> None:
         """Post initialization."""
         # general settings
-        self.decimation = 2
+        self.decimation = 2 # How many physics substeps the same action is applied for
         self.episode_length_s = 15
         # viewer settings
         self.viewer.eye = (0.0, 0.0, 40.0)

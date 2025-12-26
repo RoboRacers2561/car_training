@@ -46,7 +46,7 @@ class LeatherbackActuatorParamsCfg:
     # steering
     steering_effort_limit: float = 40000.0
     steering_velocity_limit: float = 100.0
-    steering_stiffness: float = 1000.0
+    steering_stiffness: float = 10.0
     steering_damping: float = 0.0
     steering_joint_names_expr: list[str] = ["Knuckle__Upright__Front.*"]
 

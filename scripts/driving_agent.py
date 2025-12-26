@@ -41,11 +41,12 @@ import omni
 from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image
 
 class WasdTeleop:
-    def __init__(self, throttle_speed=10.0, steer_angle=0.5, number_of_envs=1):
+    def __init__(self, throttle_speed=1.0, steer_angle=0.0, number_of_envs=1):
         self.throttle_speed = float(throttle_speed)
         self.steer_angle = float(steer_angle)
         self.number_of_envs = number_of_envs
         self.current_env_index = 0
+        self.max_steer = 0.6  # rad
 
         self._input = carb.input.acquire_input_interface()
         self._keyboard = omni.appwindow.get_default_app_window().get_keyboard()
@@ -63,10 +64,12 @@ class WasdTeleop:
             self.throttle_speed -= 1
             print(f"setting throttle to {self.throttle_speed}")
         elif e.input == carb.input.KeyboardInput.A:
-            self.steer_angle += 0.1
+            if self.steer_angle < self.max_steer:
+                self.steer_angle += 0.1
             print(f"setting steer angle to {self.steer_angle}")
         elif e.input == carb.input.KeyboardInput.D:
-            self.steer_angle -= 0.1
+            if self.steer_angle > -self.max_steer:
+                self.steer_angle -= 0.1
             print(f"setting steer angle to {self.steer_angle}")
         elif e.input == carb.input.KeyboardInput.TAB:
             print("Switching environment")
@@ -102,7 +105,7 @@ def main():
     number_of_envs = env.unwrapped.num_envs
     print(f"Number of environments: {number_of_envs}")
     
-    teleop = WasdTeleop(throttle_speed=1.0, steer_angle=0.5, number_of_envs=number_of_envs)
+    teleop = WasdTeleop(throttle_speed=3.0, steer_angle=-0.2, number_of_envs=number_of_envs)
     # simulate environment
     while simulation_app.is_running():
         # run everything in inference mode
