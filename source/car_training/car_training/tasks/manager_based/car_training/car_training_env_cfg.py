@@ -193,7 +193,7 @@ class ObservationsCfg:
         image = ObsTerm(func=track_neighborhood_image,
                         params={"asset_cfg": SceneEntityCfg("robot"),},
                         clip=(0.0, 255.0),)
-        joint_vel_rel = ObsTerm(func=robot_heading,
+        joint_vel_rel = ObsTerm(func=robot_vel,
                                 params={"asset_cfg": SceneEntityCfg("robot")},
                                 )
 
