@@ -8,6 +8,7 @@
 """Launch Isaac Sim Simulator first."""
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -44,6 +45,8 @@ parser.add_argument(
     default=False,
     help="Use a slower SB3 wrapper but keep all the extra training info.",
 )
+parser.add_argument("--debug", action="store_true", default=False, help="Enable debug mode which will enable debug log level on internals.")
+
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -87,6 +90,7 @@ from isaaclab_tasks.utils.hydra import hydra_task_config
 from isaaclab_tasks.utils.parse_cfg import get_checkpoint_path
 
 import car_training.tasks  # noqa: F401
+from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image
 
 
 @hydra_task_config(args_cli.task, args_cli.agent)
@@ -131,7 +135,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     env_cfg.log_dir = log_dir
 
     # create isaac environment
-    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+    log_level = logging.DEBUG if args_cli.debug else logging.INFO
+    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None, task_name=args_cli.task, console_level=log_level, file_level=log_level)
 
     # post-process agent configuration
     agent_cfg = process_sb3_cfg(agent_cfg, env.unwrapped.num_envs)
@@ -153,6 +158,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         env = gym.wrappers.RecordVideo(env, **video_kwargs)
     # wrap around environment for stable baselines
     env = Sb3VecEnvWrapper(env, fast_variant=not args_cli.keep_all_info)
+
+    # Initialize static track image
+    init_static_track_image(env.unwrapped, camera_name="overhead_camera")
 
     vec_norm_path = checkpoint_path.replace("/model", "/model_vecnormalize").replace(".zip", ".pkl")
     vec_norm_path = Path(vec_norm_path)

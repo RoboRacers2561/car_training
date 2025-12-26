@@ -105,6 +105,14 @@ def track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) 
     # Convert to grayscale
     gray_crops = 0.2989 * crops[:, 0:1, :, :] + 0.5870 * crops[:, 1:2, :, :] + 0.1140 * crops[:, 2:3, :, :]  # (N, 1, crop, crop)
 
+    gray_crops = (gray_crops > 0.5).float()
+    # log the shape of gray crops
+
+    logger.debug("Obtained track neighborhood images.")
+    logger.debug_lazy("Track neighborhood image shape: %s", lambda: list(gray_crops.shape))
+
+    logger.debug_lazy("Track neighborhood image min/max: %s", lambda: list((gray_crops.min().item(), gray_crops.max().item())))
+
     # print image shape for debugging
     # print(f"track neighborhood image shape: {gray_crops.shape}")
 
@@ -129,9 +137,22 @@ def robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor
     logger = get_logger(env)
     asset: RigidObject = env.scene[asset_cfg.name]
 
-    relative_vel = asset.data.root_lin_vel_w[:, :2] # Return x, y velocity
+    relative_vel = asset.data.root_com_lin_vel_w[:, :2] # Return x, y velocity
+
     logger.debug_lazy("Car velocities: %s", lambda: relative_vel)
     return relative_vel
+
+def robot_heading(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+
+    logger = get_logger(env)
+    asset: RigidObject = env.scene[asset_cfg.name]
+    robot_heading = asset.data.heading_w
+
+    logger.debug_lazy("Car heading: %s", lambda: robot_heading)
+
+    # make a unit vector
+    robot_heading = torch.stack((torch.cos(robot_heading), -torch.sin(robot_heading)), dim=-1) # negative y to match image coords
+    return robot_heading
 
 def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, do_convert_coords: bool = False) -> torch.Tensor:
     """

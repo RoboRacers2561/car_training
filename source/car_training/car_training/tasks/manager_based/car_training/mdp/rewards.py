@@ -22,7 +22,7 @@ import cv2
 import logging
 
 from car_training.tasks.manager_based.car_training.mdp.utils.helpers import *
-from car_training.tasks.manager_based.car_training.mdp.observation import robot_pos, robot_vel
+from car_training.tasks.manager_based.car_training.mdp.observation import robot_pos, robot_vel, robot_heading
 from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import GpuSafeLogger
 
 _LOGGER: Optional[GpuSafeLogger] = None
@@ -92,8 +92,18 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
         car_center = robot_pos(env, robot_cfg, do_convert_coords=True).cpu().numpy()[index]
         car_velocity = robot_vel(env, robot_cfg).cpu().numpy()[index]
         car_speed = np.linalg.norm(car_velocity)
+        # car_heading = robot_heading(env, robot_cfg).cpu().numpy()[index]
         logger.debug(f"car_speed type: {type(car_speed)}")
         logger.debug_lazy("car speed %s", lambda: car_speed)
+
+        # draw the velocity vector on the image for debugging
+        # start_point = (int(car_center[0]), int(car_center[1]))
+        # end_point = (int(car_center[0] + car_velocity[0]*100), int(car_center[1] + car_velocity[1]*100))
+        # cv2.arrowedLine(frame, start_point, end_point, (255, 0, 0), 2)  # Draw velocity vector in blue
+        # end_point = (int(car_center[0] + 50 * car_heading[0]), int(car_center[1] + 50 * car_heading[1]))
+        # cv2.arrowedLine(frame, start_point, end_point, (255, 0, 0), 2)  # Draw heading vector in blue
+        # cv2.circle(frame, (int(car_center[0]), int(car_center[1])), 5, (0, 255, 0), -1)  # Draw car center in green
+        # cv2.imwrite(f"debug_image_with_velocity_{index}.png", frame)  # Save the image with velocity vector for debugging
 
         # cv2.circle(frame, (int(car_center[0]), int(car_center[1])), 5, (0, 0, 255), -1)  # Draw car center in red
         # cv2.imwrite(f"debug_image_with_car_center_{index}.png", frame)  # Save the image with car center for debugging
