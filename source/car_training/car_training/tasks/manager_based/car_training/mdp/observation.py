@@ -178,3 +178,27 @@ def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, do_convert_coor
         relative_pos = convert_coords(relative_pos, track_size, (camera_width, camera_height))
         logger.debug_lazy("Car image positions: %s", lambda: relative_pos)
     return relative_pos[:, :2]  # Return x, y position
+
+def forward_speed(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """
+    Calculate the forward speed of the car.
+
+    Args:
+        env: The environment instance.
+        asset_cfg: The configuration of the car asset.
+
+    Returns:
+        torch.Tensor: The forward speed of the car.
+    """
+    logger = get_logger(env)
+    asset: RigidObject = env.scene[asset_cfg.name]
+
+    heading = asset.data.heading_w  # (num_envs,)
+    lin_vel = asset.data.root_com_lin_vel_w  # (num_envs, 3)
+
+    heading_vector = torch.stack((torch.cos(heading), torch.sin(heading), torch.zeros_like(heading)), dim=-1)  # (num_envs, 3)
+
+    forward_speed = torch.sum(lin_vel * heading_vector, dim=-1)  # (num_envs,)
+
+    logger.debug_lazy("Car forward speeds: %s", lambda: forward_speed)
+    return forward_speed
