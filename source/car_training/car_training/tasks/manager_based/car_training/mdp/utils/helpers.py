@@ -3,6 +3,7 @@ import cv2
 from pathlib import Path
 import os
 import torch
+import torch.nn.functional as F
 import logging
 PROJECT_ROOT = Path(__file__).parents[8].resolve()
 TEST_DATA_PATH = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/mdp/utils/test_data/")
@@ -292,6 +293,40 @@ def convert_coords(
     return image_coords.type(dtype)
 
 
+def rotate_torch_image(image: torch.Tensor, angle_degrees: torch.Tensor) -> torch.Tensor:
+    """
+    Rotate a torch image tensor by a specified angle in degrees.
+
+    :param image: Input image tensor of shape (N, 3, H, W).
+    :type image: torch.Tensor
+    :param angle_degrees: Angles to rotate each image in degrees.
+    :type angle_degrees: torch.Tensor
+
+    :return: Rotated image tensor of shape (N, 3, H, W).
+    :rtype: torch.Tensor
+    """
+
+    angle_radians = -angle_degrees * (np.pi / 180.0)  # Negative for clockwise rotation
+    N, C, H, W = image.shape
+
+    # Create rotation matrices
+    cos_angles = torch.cos(angle_radians)
+    sin_angles = torch.sin(angle_radians)
+    rotation_matrices = torch.zeros((N, 2, 3), device=image.device, dtype=image.dtype)
+    rotation_matrices[:, 0, 0] = cos_angles
+    rotation_matrices[:, 0, 1] = -sin_angles
+    rotation_matrices[:, 1, 0] = sin_angles
+    rotation_matrices[:, 1, 1] = cos_angles
+
+    # Create affine grid
+    grid = F.affine_grid(rotation_matrices, size=image.size(), align_corners=False)
+
+    # Sample the image using the grid
+    rotated_image = F.grid_sample(image, grid, mode='bilinear', padding_mode='border', align_corners=False)
+
+    return rotated_image    
+
+
 if __name__ == "__main__":
     test_image = cv2.imread("debug_image_testing.png")
     car_center = get_green_car_center(test_image, debug=True)
@@ -312,10 +347,3 @@ if __name__ == "__main__":
     cv2.circle(test_image, (int(closest_point[0]), int(closest_point[1])), 5, (0, 255, 0), -1)
     cv2.imshow("Car and Closest Track Point", test_image)
     cv2.waitKey(0)
-
-
-
-
-
-
-
