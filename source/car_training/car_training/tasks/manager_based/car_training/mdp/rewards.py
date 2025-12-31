@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Optional
 from isaaclab.assets import Articulation
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils.math import wrap_to_pi
-from isaaclab.utils import convert_dict_to_backend
 from isaaclab.assets import RigidObject
 
 if TYPE_CHECKING:
@@ -65,33 +64,26 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
     logger.debug("Calculating total reward...")
 
     camera: Articulation = env.scene[camera_cfg.name]
-    
-    cam_data = convert_dict_to_backend(
-                {k: v for k, v in camera.data.output.items()}, backend="numpy")
 
-    # compute the reward
+    rgb = camera.data.output['rgb']
 
-    H, W, _ = cam_data['rgb'][0].shape
-    logger.debug(f"Camera image shape: H={H}, W={W}")
-    
+    rgb_cpu = rgb.detach().cpu().numpy()
 
-    # Here I think we can have access to the sensors and images for each copy of the simulation.
-    # We can compute the reward for each copy separately and then combine them.
+    car_centers = robot_pos(env, robot_cfg, do_convert_coords=True).detach().cpu().numpy()
+    car_vels = robot_vel(env, robot_cfg).detach().cpu().numpy()
+    car_speeds = np.linalg.norm(car_vels, axis=1)
 
-    all_rewards = []
-    index = 0
-    # TODO: I added index here because the car_center is expected to be a tuple or list not a list[list], but I think 
-    # there is a better way to do this, especially since we are looping through all images, which is O(num_envs), maybe there
-    # is a way to vectorize this.
-    for frame in cam_data['rgb']:
-        # print(f"frames.shape:{frames.shape, type(frames)}")
-        # cv2.imwrite("debug_image.png", frame)  # Save the image for debugging
-        # print("Saved debug_image.png")
+    num_envs = car_centers.shape[0]
+    rewards = np.empty((num_envs,), dtype=np.float32)
+
+
+    for i in range(num_envs):
         # for each copy of the simulation find the track points and compute the reward
+        frame = rgb_cpu[i]
         track_points_list = find_track_points_from_image(frame)
-        car_center = robot_pos(env, robot_cfg, do_convert_coords=True).cpu().numpy()[index]
-        car_velocity = robot_vel(env, robot_cfg).cpu().numpy()[index]
-        car_speed = np.linalg.norm(car_velocity)
+        
+        car_center = car_centers[i]
+        car_speed = float(car_speeds[i])
         # car_heading = robot_heading(env, robot_cfg).cpu().numpy()[index]
         logger.debug(f"car_speed type: {type(car_speed)}")
         logger.debug_lazy("car speed %s", lambda: car_speed)
@@ -119,10 +111,8 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
 
         total_reward = (distance_reward + velocity_reward_value + alive_reward - track_penalty)
 
-        all_rewards.append(total_reward)
-        logger.debug(f"Simulation {index}: Distance Reward: {distance_reward}, Velocity Reward: {velocity_reward_value}, Alive Reward: {alive_reward}, Track Penalty: {track_penalty}, Total Reward: {total_reward}")
-        index += 1
+        rewards[i] = total_reward
+        logger.debug(f"Simulation {i}: Distance Reward: {distance_reward}, Velocity Reward: {velocity_reward_value}, Alive Reward: {alive_reward}, Track Penalty: {track_penalty}, Total Reward: {total_reward}")
 
-    total_reward = torch.tensor(all_rewards, dtype=torch.float32, device=env.device)
-    return total_reward
+    return torch.from_numpy(rewards).to(device=env.device)
 
