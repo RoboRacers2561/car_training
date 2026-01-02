@@ -80,7 +80,12 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
     for i in range(num_envs):
         # for each copy of the simulation find the track points and compute the reward
         frame = rgb_cpu[i]
-        track_points_list = find_track_points_from_image(frame)
+        track_points_list = env.unwrapped.track_points[i]
+
+        # draw track points for debugging
+        # for point in track_points_list:
+        #     cv2.circle(frame, (int(point[0]), int(point[1])), 3, (0, 255, 0), -1)  # Draw track points in green
+        # cv2.imwrite(f"debug_image_with_track_points_{i}.png", frame)  # Save the image with track points for debugging
         
         car_center = car_centers[i]
         car_speed = float(car_speeds[i])
