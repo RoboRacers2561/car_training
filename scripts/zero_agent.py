@@ -39,9 +39,6 @@ from isaaclab_tasks.utils import parse_env_cfg
 
 import car_training.tasks  # noqa: F401
 
-from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image
-
-
 def main():
     """Zero actions agent with Isaac Lab environment."""
     # parse configuration
@@ -59,9 +56,6 @@ def main():
     # reset environment
     env.reset()
     # simulate environment
-
-    # initialize static track image
-    init_static_track_image(env.unwrapped, camera_name="overhead_camera")
 
     while simulation_app.is_running():
         # run everything in inference mode

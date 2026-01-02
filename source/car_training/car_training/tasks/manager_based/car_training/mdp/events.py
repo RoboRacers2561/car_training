@@ -56,17 +56,24 @@ def set_robot_visibility(env: ManagerBasedRLEnv, visible: bool):
         else:
             UsdGeom.Imageable(prim).MakeInvisible()
 
-def init_static_track_image(env: ManagerBasedRLEnv, camera_name = "overhead_camera", num_warmup_steps=10):
+def init_static_track_image(env: ManagerBasedRLEnv, camera_name: str = "overhead_camera", num_warmup_steps: int = 10):
+    """
+    Initialize and capture a static track image from a specified camera in the environment. This method should be called once for all. 
+    The function temporarily hides the robot(s) in the environment to ensure they do not appear in the captured image.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+    :param camera_name: The name of the camera from which to capture the static track image
+    :type camera_name: str
+    :param num_warmup_steps: The number of warmup steps to render before capturing
+    :type num_warmup_steps: int
+    :return: The captured static track image as a tensor of shape (num_envs, H, W, 3).
+    :rtype: torch.Tensor
+    """
+
+
     logger = get_logger(env)
     logger.info("Initializing static track image from camera: %s", camera_name)
-
-
-    # Initialize attribute once
-    if not hasattr(env, "static_track_image"):
-        env.static_track_image = None
-        logger.warning("static_track_image attribute not found. Initializing to None.")
-    if env.static_track_image is not None:
-        return
 
     # hide robots so they don't appear
     set_robot_visibility(env, visible=False)
@@ -85,10 +92,14 @@ def init_static_track_image(env: ManagerBasedRLEnv, camera_name = "overhead_came
 
     rgb = env.scene[camera_name].data.output["rgb"]  # (num_envs, H, W, 3)
 
+    # for debugging: save images
     # for i in range(rgb.shape[0]):
     #     img = rgb[i].cpu().numpy()
     #     Image.fromarray(img).save(f"{camera_name}_hidden_robot_{i}.png")
-    env.static_track_image = rgb.clone()
+
+    static_track_image = rgb.clone()
 
     # show robots back
     set_robot_visibility(env, visible=True)
+
+    return static_track_image

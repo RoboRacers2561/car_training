@@ -84,8 +84,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
-from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image
-
 class ResidualBlock(nn.Module):
     def __init__(self, channels):
         super().__init__()
@@ -233,9 +231,6 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # wrap around environment for stable baselines
     env = Sb3VecEnvWrapper(env)
-
-    # Initialize static track image
-    init_static_track_image(env.unwrapped, camera_name="overhead_camera")
 
     if "normalize_input" in agent_cfg:
         env = VecNormalize(
