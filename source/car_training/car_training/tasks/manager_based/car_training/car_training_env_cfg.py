@@ -33,13 +33,12 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parents[6].resolve()
 leatherback_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/robot_assets/leatherback_simple_better.usd")
+
+# Track USD paths
 track_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/scene_assets/")
-TRACK_USD_PATHS = [
-    track_usd_path + "tracks/track_0.usd",
-    track_usd_path + "tracks/track_1.usd",
-    track_usd_path + "tracks/track_2.usd",
-    track_usd_path + "tracks/track_3.usd",
-]
+TRACK_USD_PATHS = []
+for i in range(0, 12):
+    TRACK_USD_PATHS.append(track_usd_path + f"tracks/track_{i}.usd")
 
 
 ## 

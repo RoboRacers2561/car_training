@@ -13,6 +13,7 @@ import cv2
 import copy
 import torch
 import torch.nn.functional as F
+import torchvision.transforms.functional as TF
 import numpy as np
 from isaaclab.assets import RigidObject
 from car_training.tasks.manager_based.car_training.mdp.utils.helpers import convert_coords, rotate_torch_image
@@ -200,6 +201,8 @@ def forward_speed(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Te
 
     forward_speed = torch.sum(lin_vel * heading_vector, dim=-1)  # (num_envs,)
     logger.debug_lazy("Car forward speeds: %s", lambda: forward_speed)
+    # print speed of env 0 for debugging
+    print(f"Car forward speed env 0: {forward_speed[0].item()}")
     return forward_speed
 
 
@@ -257,6 +260,23 @@ def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEnt
         dim=-1,
     )  # (N, crop, crop, 2)
 
+    # Get car headings and compute rotation angles
+    headings = asset_heading = robot_heading(env, asset_cfg)  # (N, 2)
+    angles = torch.atan2(-headings[:, 0], headings[:, 1]) + torch.pi  # (N,) Negative x to match image coords
+
+    cos = torch.cos(angles).view(-1, 1, 1, 1)  # (N,1,1,1)
+    sin = torch.sin(angles).view(-1, 1, 1, 1)  # (N,1,1,1)
+
+    center = torch.stack((cx, cy), dim=-1).view(-1, 1, 1, 2)  # (N,1,1,2)
+    rel = grid - center  # (N,H,W,2)
+    rel_x = rel[..., 0:1]
+    rel_y = rel[..., 1:2]
+
+    rot_x = cos * rel_x - sin * rel_y
+    rot_y = sin * rel_x + cos * rel_y
+
+    grid = torch.cat((rot_x, rot_y), dim=-1) + center  # (N,H,W,2)
+
     # Sample with border padding
     crops = F.grid_sample(
         imgs,
@@ -280,7 +300,7 @@ def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEnt
     # print image shape for debugging
     # print(f"track neighborhood image shape: {gray_crops.shape}")
 
-    # save debug image
+    #save debug image
     # debug_img = gray_crops[0, 0].cpu().numpy() * 255
     # cv2.imwrite("debug_track_neighborhood_image.png", debug_img)
 
