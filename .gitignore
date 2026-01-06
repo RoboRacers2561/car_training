@@ -8,11 +8,11 @@
 **/*.dmp
 **/.thumbs
 
-# No USD files allowed in the repo
-**/*.usd
-**/*.usda
-**/*.usdc
-**/*.usdz
+# # No USD files allowed in the repo
+# **/*.usd
+# **/*.usda
+# **/*.usdc
+# **/*.usdz
 
 # Python
 .DS_Store
@@ -69,10 +69,6 @@ tests/
 
 # Docker history
 .isaac-lab-docker-history
-
-# For git scripts which tell the user ID
-git-sasan.sh
-git-will.sh
 
 # Temporary files
 source/car_training/car_training/tasks/manager_based/car_training/mdp/utils/test_data
