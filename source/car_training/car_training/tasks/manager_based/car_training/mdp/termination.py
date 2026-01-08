@@ -9,7 +9,7 @@ from isaaclab.managers import SceneEntityCfg
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
-from car_training.tasks.manager_based.car_training.mdp.observation import track_neighborhood_image
+from car_training.tasks.manager_based.car_training.mdp.observation import aligned_track_neighborhood_image
 from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import GpuSafeLogger
 
 _LOGGER: Optional[GpuSafeLogger] = None
@@ -45,7 +45,7 @@ def off_track_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> 
     logger = get_logger(env)
 
     # Get track neigborhborhood image & if not black pixels, terminate
-    track_imgs = track_neighborhood_image(env, asset_cfg)  # (N, 1, H, W)
+    track_imgs = aligned_track_neighborhood_image(env, asset_cfg)  # (N, 1, H, W)
     gray_imgs = track_imgs.squeeze(1)  # (N, H, W)
     # Check for black pixels
     black_pixel_threshold = 0.12  # Define a threshold to consider a pixel as black

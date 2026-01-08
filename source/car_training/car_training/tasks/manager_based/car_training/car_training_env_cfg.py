@@ -21,7 +21,7 @@ from isaaclab.actuators import ImplicitActuatorCfg
 
 from . import mdp
 from car_training.tasks.manager_based.car_training.mdp.rewards import get_total_reward
-from car_training.tasks.manager_based.car_training.mdp.observation import  robot_vel, track_neighborhood_image, robot_heading, forward_speed, aligned_track_neighborhood_image
+from car_training.tasks.manager_based.car_training.mdp.observation import  robot_vel, aligned_track_neighborhood_image
 from car_training.tasks.manager_based.car_training.mdp.termination import off_track_termination
 from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSteerAckermannAction
 from car_training.tasks.manager_based.car_training.configs.leatherback_params import LeatherbackParamsCfg
