@@ -21,7 +21,7 @@ from isaaclab.actuators import ImplicitActuatorCfg
 
 from . import mdp
 from car_training.tasks.manager_based.car_training.mdp.rewards import get_total_reward
-from car_training.tasks.manager_based.car_training.mdp.observation import  robot_vel, track_neighborhood_image, robot_heading
+from car_training.tasks.manager_based.car_training.mdp.observation import  robot_vel, track_neighborhood_image, robot_heading, forward_speed, aligned_track_neighborhood_image
 from car_training.tasks.manager_based.car_training.mdp.termination import off_track_termination
 from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSteerAckermannAction
 from car_training.tasks.manager_based.car_training.configs.leatherback_params import LeatherbackParamsCfg
@@ -33,13 +33,12 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parents[6].resolve()
 leatherback_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/robot_assets/leatherback_simple_better.usd")
+
+# Track USD paths
 track_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/scene_assets/")
-TRACK_USD_PATHS = [
-    track_usd_path + "tracks/track_0.usd",
-    track_usd_path + "tracks/track_1.usd",
-    track_usd_path + "tracks/track_2.usd",
-    track_usd_path + "tracks/track_3.usd",
-]
+TRACK_USD_PATHS = []
+for i in range(0, 12):
+    TRACK_USD_PATHS.append(track_usd_path + f"tracks/track_{i}.usd")
 
 
 ## 
@@ -190,10 +189,10 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        image = ObsTerm(func=track_neighborhood_image,
+        image = ObsTerm(func=aligned_track_neighborhood_image,
                         params={"asset_cfg": SceneEntityCfg("robot"),},
                         clip=(0.0, 255.0),)
-        joint_vel_rel = ObsTerm(func=robot_heading,
+        joint_vel_rel = ObsTerm(func=robot_vel,
                                 params={"asset_cfg": SceneEntityCfg("robot")},
                                 )
 

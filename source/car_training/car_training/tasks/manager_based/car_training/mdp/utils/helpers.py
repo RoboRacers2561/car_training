@@ -3,6 +3,8 @@ import cv2
 from pathlib import Path
 import os
 import torch
+import torch.nn.functional as F
+import torchvision.transforms.functional as TF
 import logging
 PROJECT_ROOT = Path(__file__).parents[8].resolve()
 TEST_DATA_PATH = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/mdp/utils/test_data/")
@@ -292,6 +294,29 @@ def convert_coords(
     return image_coords.type(dtype)
 
 
+def rotate_torch_image(image: torch.Tensor, angle_degrees: torch.Tensor) -> torch.Tensor:
+    """
+    Rotate a torch image tensor by a specified angle in degrees.
+
+    :param image: Input grayscale image tensor of shape (N, H, W, 2).
+    :type image: torch.Tensor
+    :param angle_degrees: Angles to rotate each image in degrees.
+    :type angle_degrees: torch.Tensor
+
+    :return: Rotated image tensor of shape (N, 3, H, W).
+    :rtype: torch.Tensor
+    """
+    # TODO: Vectorize this function to avoid the for loop. Maybe need to implement custom rotation function.
+    rotated_images = []
+    N = image.shape[0]
+    for i in range(N):
+        img = image[i]  # (3, H, W)
+        angle = angle_degrees[i].item()
+        rotated_img = TF.rotate(img, angle, expand=False)
+        rotated_images.append(rotated_img)
+    return torch.stack(rotated_images, dim=0)
+
+
 if __name__ == "__main__":
     test_image = cv2.imread("debug_image_testing.png")
     car_center = get_green_car_center(test_image, debug=True)
@@ -312,10 +337,3 @@ if __name__ == "__main__":
     cv2.circle(test_image, (int(closest_point[0]), int(closest_point[1])), 5, (0, 255, 0), -1)
     cv2.imshow("Car and Closest Track Point", test_image)
     cv2.waitKey(0)
-
-
-
-
-
-
-
