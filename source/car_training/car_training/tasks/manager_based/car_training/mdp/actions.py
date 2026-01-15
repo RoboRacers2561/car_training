@@ -11,6 +11,9 @@ from isaaclab.managers import ActionTerm
 from isaaclab.managers import SceneEntityCfg, ActionTermCfg
 from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import GpuSafeLogger
 
+import csv
+import os
+
 
 
 REAR_WHEEL_NAMES = ["Wheel__Upright__Rear_Right", "Wheel__Upright__Rear_Left"]
@@ -137,3 +140,20 @@ class ThrottleSteerAckermannAction(ActionTerm):
         # Apply
         self.robot.set_joint_velocity_target(rear_vel, joint_ids=self.rear_ids)
         self.robot.set_joint_position_target(front_pos, joint_ids=self.front_ids)
+    
+    def record_actions_to_file(self, throttle_tensor, steering_tensor):
+        """
+        Save the throttle and steering commands to a CSV file for analysis.
+        """
+        
+
+        log_dir = "action_logs"
+        os.makedirs(log_dir, exist_ok=True)
+        file_path = os.path.join(log_dir, "throttle_steering_commands.csv")
+
+        with open(file_path, mode='a', newline='') as file:
+            writer = csv.writer(file)
+            for throttle, steering in zip(throttle_tensor.cpu().numpy(), steering_tensor.cpu().numpy()):
+                writer.writerow([throttle, steering])
+
+        self.logger.info(f"Recorded actions to {file_path}")
