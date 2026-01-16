@@ -3,8 +3,8 @@ from isaaclab.utils import configclass
 @configclass
 class LeatherbackRigidPropsCfg:
     rigid_body_enabled: bool = True
-    max_linear_velocity: float = 100.0
-    max_angular_velocity: float = 100.0
+    max_linear_velocity: float = 1000.0
+    max_angular_velocity: float = 1000.0
     max_depenetration_velocity: float = 100.0
     enable_gyroscopic_forces: bool = True
 
@@ -36,17 +36,17 @@ class LeatherbackInitStateCfg:
 
 @configclass
 class LeatherbackActuatorParamsCfg:
-    # throttle
+    # throttle on the back two wheels
     throttle_effort_limit: float = 40000.0
     throttle_velocity_limit: float = 100.0
     throttle_stiffness: float = 0.0
     throttle_damping: float = 100000.0
-    throttle_joint_names_expr: list[str] = ["Wheel__Upright__Rear.*"]
+    throttle_joint_names_expr: list[str] = ["Wheel.*"] # I am giving to to all to the front wheels too so that wobbling is reduced
 
     # steering
     steering_effort_limit: float = 40000.0
     steering_velocity_limit: float = 100.0
-    steering_stiffness: float = 10.0
+    steering_stiffness: float = 1000.0
     steering_damping: float = 0.0
     steering_joint_names_expr: list[str] = ["Knuckle__Upright__Front.*"]
 

@@ -22,6 +22,8 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 CROPPED_IMAGE_SIZE = 64
+FRONT_STEER_NAMES = ["Knuckle__Upright__Front_Right", "Knuckle__Upright__Front_Left"]
+
 
 _LOGGER: Optional[GpuSafeLogger] = None
 
@@ -224,3 +226,23 @@ def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEnt
     # cv2.imwrite("debug_track_neighborhood_image.png", debug_img)
 
     return gray_crops
+
+def front_wheels_angle(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """
+    Get the front wheels steering angle of the car.
+
+    
+    """
+    logger = get_logger(env)
+    # robot: Articulation = env.scene[asset_cfg.asset_name]
+    robot = env.unwrapped.scene["robot"]
+
+    front_ids, _ = robot.find_joints(FRONT_STEER_NAMES)
+
+    front_right_angle = robot.data.joint_pos[:, front_ids][:, 0] # Num_envs x 1
+    front_left_angle = robot.data.joint_pos[:, front_ids][:, 1] # Num_envs x 1
+
+    logger.debug_lazy("Front right wheel angle: %s", lambda: front_right_angle)
+    logger.debug_lazy("Front left wheel angle: %s", lambda: front_left_angle)
+
+    return front_right_angle, front_left_angle

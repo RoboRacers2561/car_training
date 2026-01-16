@@ -21,7 +21,7 @@ import cv2
 import logging
 
 from car_training.tasks.manager_based.car_training.mdp.utils.helpers import *
-from car_training.tasks.manager_based.car_training.mdp.observation import robot_pos, robot_vel, robot_heading
+from car_training.tasks.manager_based.car_training.mdp.observation import robot_pos, robot_vel, robot_heading, front_wheels_angle
 from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import GpuSafeLogger
 
 _LOGGER: Optional[GpuSafeLogger] = None
@@ -76,6 +76,7 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
     num_envs = car_centers.shape[0]
     rewards = np.empty((num_envs,), dtype=np.float32)
 
+    print(front_wheels_angle(env=env))
 
     for i in range(num_envs):
         # for each copy of the simulation find the track points and compute the reward
