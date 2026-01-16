@@ -63,11 +63,11 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
 
     logger.debug("Calculating total reward...")
 
-    camera: Articulation = env.scene[camera_cfg.name]
+    # camera: Articulation = env.scene[camera_cfg.name]
 
-    rgb = camera.data.output['rgb']
+    # rgb = camera.data.output['rgb']
 
-    rgb_cpu = rgb.detach().cpu().numpy()
+    # rgb_cpu = rgb.detach().cpu().numpy()
 
     car_centers = robot_pos(env, robot_cfg, do_convert_coords=True).detach().cpu().numpy()
     car_vels = robot_vel(env, robot_cfg).detach().cpu().numpy()
@@ -76,11 +76,9 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
     num_envs = car_centers.shape[0]
     rewards = np.empty((num_envs,), dtype=np.float32)
 
-    print(front_wheels_angle(env=env))
-
     for i in range(num_envs):
         # for each copy of the simulation find the track points and compute the reward
-        frame = rgb_cpu[i]
+        # frame = rgb_cpu[i]
         track_points_list = env.unwrapped.track_points[i]
 
         # draw track points for debugging
@@ -120,5 +118,64 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
         rewards[i] = total_reward
         logger.debug(f"Simulation {i}: Distance Reward: {distance_reward}, Velocity Reward: {velocity_reward_value}, Alive Reward: {alive_reward}, Track Penalty: {track_penalty}, Total Reward: {total_reward}")
 
-    return torch.from_numpy(rewards).to(device=env.device)
+    total_reward_no_smoothing = torch.from_numpy(rewards).to(device=env.device)
+    smooth_steering = steering_jerk_penalty(env, weight=0.0001)
+    total_reward = total_reward_no_smoothing + smooth_steering
+    logger.debug_lazy("Total reward with smooth steering: %s", lambda: total_reward)
 
+    return total_reward
+
+
+
+def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.Tensor:
+    """
+    Reward for smooth steering by penalizing large changes in steering angle.
+
+    :param weight: Weight of the smooth steering reward.
+    :type weight: float
+
+    :return: Smooth steering reward.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+
+    logger.debug("Calculating steering jerk penalty...")
+
+    drive = env.action_manager._terms["drive"]
+
+    action_now = drive.action_curr
+    if action_now is None:
+        return torch.zeros((env.num_envs,), device=env.device)
+
+    # Initialize history on first call
+    if drive.action_prev is None or drive.action_prev2 is None:
+        logger.debug("Initializing action history for steering jerk penalty.")
+        drive.action_prev = action_now.clone()
+        drive.action_prev2 = action_now.clone()
+        return torch.zeros((env.num_envs,), device=env.device)
+
+    steer_now  = action_now[:, 1]
+    steer_prev = drive.action_prev[:, 1]
+    steer_prev2= drive.action_prev2[:, 1]
+
+    # dt is optional; keep if you want rate-invariance
+    dt = env.cfg.sim.dt * env.cfg.decimation
+    j = (steer_now - 2.0 * steer_prev + steer_prev2) / (dt * dt)
+
+    rew = -weight * (j * j)
+
+    logger.debug_lazy("Steering angles now: %s", lambda: steer_now)
+    logger.debug_lazy("Steering angles prev: %s", lambda: steer_prev)
+    logger.debug_lazy("Steering angles prev2: %s", lambda: steer_prev2)
+    logger.debug_lazy("Decimation: %s", lambda: env.cfg.decimation)
+    logger.debug_lazy("Sim dt: %s", lambda: env.cfg.sim.dt)
+    logger.debug_lazy("Control timestep dt: %s", lambda: dt)
+    logger.debug_lazy("Steering jerk: %s", lambda: j)
+    logger.debug_lazy("Smooth steering reward: %s", lambda: rew)
+    # IMPORTANT: shift history ONCE per RL step (reward is called once per RL step)
+    drive.action_prev2 = drive.action_prev.clone()
+    drive.action_prev  = action_now.clone()
+
+    
+    return rew
+    

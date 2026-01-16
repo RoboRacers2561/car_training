@@ -88,6 +88,10 @@ class ThrottleSteerAckermannAction(ActionTerm):
         self._action_dim = 2
         self.logger.debug(f"Action dimension: {self._action_dim}")
 
+        self._action_curr = None  # processed actions now
+        self._action_prev = None # action for previous step
+        self._action_prev2 = None # action for two steps ago
+
     @property
     def action_dim(self):
         return self._action_dim
@@ -102,6 +106,30 @@ class ThrottleSteerAckermannAction(ActionTerm):
     @property
     def processed_actions(self) -> torch.Tensor:
         return self._processed_actions
+    
+    @property
+    def action_prev(self) -> torch.Tensor | None:
+        return self._action_prev
+    
+    @property
+    def action_prev2(self) -> torch.Tensor | None:
+        return self._action_prev2
+    
+    @property
+    def action_curr(self) -> torch.Tensor | None:
+        return self._action_curr
+    
+    @action_prev.setter
+    def action_prev(self, value: torch.Tensor):
+        self._action_prev = value
+
+    @action_prev2.setter
+    def action_prev2(self, value: torch.Tensor):
+        self._action_prev2 = value
+
+    @action_curr.setter
+    def action_curr(self, value: torch.Tensor):
+        self._action_curr = value
 
     def process_actions(self, actions: torch.Tensor):
         """
@@ -127,6 +155,8 @@ class ThrottleSteerAckermannAction(ActionTerm):
         self.logger.debug("In apply_actions()")
         a = self._processed_actions
 
+        self._action_curr = a.clone()  # store current action
+        
         throttle = a[:, 0]
         steer = a[:, 1]
         # Rear wheel velocities (same for both rear wheels)
