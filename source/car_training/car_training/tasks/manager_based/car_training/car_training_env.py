@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+import torch
     
 import logging
 
@@ -10,6 +11,7 @@ from car_training.tasks.manager_based.car_training.mdp.utils.helpers import find
 from isaaclab.envs import ManagerBasedRLEnv
 from car_training.tasks.manager_based.car_training.car_training_env_cfg import CarTrainingEnvCfg
 from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import setup_logger, GpuSafeLogger
+from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSteerAckermannAction
 
 class CarTrainingEnv(ManagerBasedRLEnv):
     cfg: CarTrainingEnvCfg
@@ -26,13 +28,29 @@ class CarTrainingEnv(ManagerBasedRLEnv):
         self.static_track_image = None # will be initialized on first reset
         self.track_points = [] # will be initialized on first reset
 
+        self.action_driver: ThrottleSteerAckermannAction = self.action_manager._terms["drive"] # this is a ThrottleSteerAckermannAction
 
-    def reset(self, seed = None, env_ids = None, options = None):
+
+    def reset(self, seed = None, env_ids = None, options = None) -> tuple[dict[str, torch.Tensor], dict]:
+        """
+        This is the reset method for the CarTrainingEnv class. This method is called only once at the beginning 
+        of the training and is called explicitly by the user through `env.reset()`. This is not the same as the 
+        reset method used at the end of each episode, which is handled internally by the environment.
+        
+        :param seed: Optional seed for the environment reset.
+        :type seed: Optional[int]
+        :param env_ids: Optional environment IDs to reset.
+        :type env_ids: Optional[Sequence[int]]
+        :param options: Optional additional options for the reset.
+        :type options: Optional[dict]
+        """
+
         obs, info = super().reset(seed, env_ids, options)
 
         # We perform the usual reset plus an initialization of the static track image if needed
         self.__init_static_track_image_if_needed()
         self.__init_track_points_if_needed()
+        
         return obs, info
 
 

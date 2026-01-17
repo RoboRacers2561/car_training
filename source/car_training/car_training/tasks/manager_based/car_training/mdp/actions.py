@@ -88,9 +88,9 @@ class ThrottleSteerAckermannAction(ActionTerm):
         self._action_dim = 2
         self.logger.debug(f"Action dimension: {self._action_dim}")
 
-        self._action_curr = None  # processed actions now
-        self._action_prev = None # action for previous step
-        self._action_prev2 = None # action for two steps ago
+        self._action_curr = torch.full((env.num_envs, self._action_dim), float('nan'), device=env.device) # current action
+        self._action_prev = torch.full((env.num_envs, self._action_dim), float('nan'), device=env.device) # previous action
+        self._action_prev2 = torch.full((env.num_envs, self._action_dim), float('nan'), device=env.device) # action before previous
 
     @property
     def action_dim(self):
@@ -171,6 +171,31 @@ class ThrottleSteerAckermannAction(ActionTerm):
         # Apply
         self.robot.set_joint_velocity_target(rear_vel, joint_ids=self.rear_ids)
         self.robot.set_joint_position_target(front_pos, joint_ids=self.front_ids)
+
+    def reset_history(self, env_ids: list[int] | None) -> None:
+        """
+        Reset the action history for smooth steering penalty calculation. This is needed on env reset.
+
+        :param env_ids: IDs of the environments to reset.
+        :type env_ids: list[int] | None
+
+        """
+
+        self._action_curr[env_ids] = torch.full((len(env_ids), self.action_dim), float('nan'), device=self._action_curr.device)
+        self._action_prev[env_ids] = torch.full((len(env_ids), self.action_dim), float('nan'), device=self._action_prev.device)
+        self._action_prev2[env_ids] = torch.full((len(env_ids), self.action_dim), float('nan'), device=self._action_prev2.device)  
+        
+    def reset(self, env_ids: list[int] | None) -> None:
+        """
+        Reset the action term and its history.
+
+        :param env_ids: IDs of the environments to reset.
+        :type env_ids: list[int] | None
+        """
+        super().reset()
+
+        self.reset_history(env_ids=env_ids)
+
     
     def record_actions_to_file(self, throttle_tensor, steering_tensor):
         """

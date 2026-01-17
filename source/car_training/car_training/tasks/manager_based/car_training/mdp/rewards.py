@@ -144,15 +144,23 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.
     drive = env.action_manager._terms["drive"]
 
     action_now = drive.action_curr
-    if action_now is None:
-        return torch.zeros((env.num_envs,), device=env.device)
+    if torch.isnan(action_now).any():
+        raise ValueError("Current action contains NaN in steering_jerk_penalty.")
 
     # Initialize history on first call
-    if drive.action_prev is None or drive.action_prev2 is None:
+    if torch.isnan(drive.action_prev).all() and torch.isnan(drive.action_prev2).all():
         logger.debug("Initializing action history for steering jerk penalty.")
         drive.action_prev = action_now.clone()
         drive.action_prev2 = action_now.clone()
         return torch.zeros((env.num_envs,), device=env.device)
+    elif torch.isnan(drive.action_prev).any() or torch.isnan(drive.action_prev2).any():
+        # Not all NaN, but some NaN values exist which is because of reset of some envs
+        logger.debug("Partial NaN detected in action history; initializing missing values for steering jerk penalty.")
+        nan_prev = torch.isnan(drive.action_prev).any(dim=1)
+        nan_prev2 = torch.isnan(drive.action_prev2).any(dim=1)
+        drive.action_prev[nan_prev] = action_now[nan_prev].clone()
+        drive.action_prev2[nan_prev2] = action_now[nan_prev2].clone()
+
 
     steer_now  = action_now[:, 1]
     steer_prev = drive.action_prev[:, 1]
@@ -162,7 +170,7 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.
     dt = env.cfg.sim.dt * env.cfg.decimation
     j = (steer_now - 2.0 * steer_prev + steer_prev2) / (dt * dt)
 
-    rew = -weight * (j * j)
+    penalty = -weight * (j * j)
 
     logger.debug_lazy("Steering angles now: %s", lambda: steer_now)
     logger.debug_lazy("Steering angles prev: %s", lambda: steer_prev)
@@ -171,11 +179,12 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.
     logger.debug_lazy("Sim dt: %s", lambda: env.cfg.sim.dt)
     logger.debug_lazy("Control timestep dt: %s", lambda: dt)
     logger.debug_lazy("Steering jerk: %s", lambda: j)
-    logger.debug_lazy("Smooth steering reward: %s", lambda: rew)
+    logger.debug_lazy("Smooth steering reward: %s", lambda: penalty)
+
     # IMPORTANT: shift history ONCE per RL step (reward is called once per RL step)
     drive.action_prev2 = drive.action_prev.clone()
     drive.action_prev  = action_now.clone()
 
     
-    return rew
+    return penalty
     
