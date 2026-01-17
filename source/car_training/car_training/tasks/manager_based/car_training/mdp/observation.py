@@ -61,6 +61,9 @@ def robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor
 
     relative_vel = asset.data.root_com_lin_vel_w[:, :2] # Return x, y velocity
 
+    # make y velocity negative to match image coordinates
+    relative_vel[:, 1] *= -1
+
     logger.debug_lazy("Car velocities: %s", lambda: relative_vel)
     return relative_vel
 

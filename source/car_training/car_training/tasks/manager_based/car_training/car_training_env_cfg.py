@@ -22,10 +22,8 @@ from isaaclab.actuators import ImplicitActuatorCfg
 from . import mdp
 from car_training.tasks.manager_based.car_training.mdp.rewards import get_total_reward
 from car_training.tasks.manager_based.car_training.mdp.observation import  (
-    robot_vel, 
-    track_neighborhood_image, 
-    robot_heading, forward_speed, 
     aligned_track_neighborhood_image,
+    robot_vel,
     aligned_robot_vel
 )
 from car_training.tasks.manager_based.car_training.mdp.termination import off_track_termination
@@ -205,7 +203,7 @@ class ObservationsCfg:
         image = ObsTerm(func=aligned_track_neighborhood_image,
                         params={"asset_cfg": SceneEntityCfg("robot"),},
                         clip=(0.0, 255.0),)
-        joint_vel_rel = ObsTerm(func=aligned_robot_vel,
+        joint_vel_rel = ObsTerm(func=robot_vel,
                                 params={"asset_cfg": SceneEntityCfg("robot")},
                                 )
 

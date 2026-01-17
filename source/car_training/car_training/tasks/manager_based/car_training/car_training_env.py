@@ -50,6 +50,9 @@ class CarTrainingEnv(ManagerBasedRLEnv):
         # We perform the usual reset plus an initialization of the static track image if needed
         self.__init_static_track_image_if_needed()
         self.__init_track_points_if_needed()
+
+        # disable camera sensors to save computation
+        # self.scene["overhead_camera"].update_period = 5000 # update every 5000 seconds
         
         return obs, info
 
@@ -80,7 +83,5 @@ class CarTrainingEnv(ManagerBasedRLEnv):
                 image_np = self.static_track_image[index].detach().cpu().numpy()
                 track_points = find_track_points_from_image(image_np)
                 self.track_points.append(track_points)
-            # if self.track_points is None:
-            #     self.track_points = find_track_points_from_image(self.static_track_image.detach().cpu().numpy())
-            #     self.logger.info(f"Track points initialized with {len(self.track_points)} points.")
+
 
