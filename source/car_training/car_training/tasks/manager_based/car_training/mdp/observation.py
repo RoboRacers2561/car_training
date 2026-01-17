@@ -227,6 +227,40 @@ def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEnt
 
     return gray_crops
 
+def aligned_robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """
+    Calculate the car's velocity in the car's local frame, aligned with its heading.
+
+    Args:
+        env: The environment instance.
+        asset_cfg: The configuration of the car asset.
+
+    Returns:
+        torch.Tensor: The velocity vector of the car in its local frame.
+    """
+    logger = get_logger(env)
+    asset: RigidObject = env.scene[asset_cfg.name]
+
+    relative_vel = asset.data.root_com_lin_vel_w[:, :2]  # (N, 2)
+
+    heading = asset.data.heading_w  # (N,)
+
+    cos_heading = torch.cos(-heading)  # (N,)
+    sin_heading = torch.sin(-heading)  # (N,)
+
+    rot_matrix = torch.stack(
+        [
+            torch.stack([cos_heading, -sin_heading], dim=-1),
+            torch.stack([sin_heading, cos_heading], dim=-1),
+        ],
+        dim=-2,
+    )  # (N, 2, 2)
+
+    local_vel = torch.bmm(rot_matrix, relative_vel.unsqueeze(-1)).squeeze(-1)  # (N, 2)
+
+    logger.debug_lazy("Car local frame velocities: %s", lambda: local_vel)
+    return local_vel
+
 def front_wheels_angle(env: ManagerBasedRLEnv) -> torch.Tensor:
     """
     Get the front wheels steering angle of the car.
