@@ -101,6 +101,15 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
         # cv2.circle(frame, (int(car_center[0]), int(car_center[1])), 5, (0, 255, 0), -1)  # Draw car center in green
         # cv2.imwrite(f"debug_image_with_velocity_{i}.png", frame)  # Save the image with velocity vector for debugging
 
+        # cropped_image = env.observation_manager.compute_group("policy")["image"]
+        # debug_cropped_image = cropped_image[0, 0].cpu().numpy() * 255
+        # debug_cropped_image = cv2.cvtColor(debug_cropped_image.astype(np.uint8), cv2.COLOR_GRAY2BGR)
+
+        # cv2.arrowedLine(debug_cropped_image, (32, 32), (32 + int(car_vels[i][0]*30), 32 + int(car_vels[i][1]*30)), (255, 0, 0), 2)  # Draw velocity vector in blue
+        # cv2.imwrite(f"debug_cropped_image_with_velocity_{i}.png", debug_cropped_image)  # Save the cropped image with velocity vector for debugging
+
+
+
         # cv2.circle(frame, (int(car_center[0]), int(car_center[1])), 5, (0, 0, 255), -1)  # Draw car center in red
         # cv2.imwrite(f"debug_image_with_car_center_{index}.png", frame)  # Save the image with car center for debugging
         # print(f"type of car_center: {type(car_center)}, shape: {car_center.shape}")
