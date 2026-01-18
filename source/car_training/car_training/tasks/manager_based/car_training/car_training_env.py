@@ -12,6 +12,7 @@ from isaaclab.envs import ManagerBasedRLEnv
 from car_training.tasks.manager_based.car_training.car_training_env_cfg import CarTrainingEnvCfg
 from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import setup_logger, GpuSafeLogger
 from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSteerAckermannAction
+from car_training.tasks.manager_based.car_training.mdp.utils.helpers import convert_coords_list
 
 class CarTrainingEnv(ManagerBasedRLEnv):
     cfg: CarTrainingEnvCfg
@@ -27,6 +28,8 @@ class CarTrainingEnv(ManagerBasedRLEnv):
         self._static_track_inited = False
         self.static_track_image = None # will be initialized on first reset
         self.track_points = [] # will be initialized on first reset
+
+        self.track_points_world = [] # track points in world coordinates, to be filled after reset
 
         self.action_driver: ThrottleSteerAckermannAction = self.action_manager._terms["drive"] # this is a ThrottleSteerAckermannAction
 
@@ -83,5 +86,9 @@ class CarTrainingEnv(ManagerBasedRLEnv):
                 image_np = self.static_track_image[index].detach().cpu().numpy()
                 track_points = find_track_points_from_image(image_np)
                 self.track_points.append(track_points)
+
+                # convert to world coordinates
+                world_points = convert_coords_list(track_points, (10, 10), (512, 512), image_to_isaaclab=True)
+                self.track_points_world.append(world_points)
 
 

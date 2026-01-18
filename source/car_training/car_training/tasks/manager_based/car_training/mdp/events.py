@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 import logging
+import torch
+import math
 
 from PIL import Image
 import omni.usd
 from pxr import UsdGeom
 from isaacsim.core.utils.prims import get_prim_at_path
+
+from isaaclab.envs.mdp import reset_scene_to_default
 
 
 if TYPE_CHECKING:
@@ -103,3 +107,77 @@ def init_static_track_image(env: ManagerBasedRLEnv, camera_name: str = "overhead
     set_robot_visibility(env, visible=True)
 
     return static_track_image
+
+def reset_robot_root_random(
+    env,
+    env_ids: torch.Tensor,
+    asset_cfg,
+    z=0.05,
+    yaw_noise_std=0.2,     # radians, e.g. 0.2 ~= 11.5 degrees
+    lookahead=5,           # how many points ahead to compute tangent
+):
+    robot = env.scene[asset_cfg.name]
+    device = env.device
+    n = env_ids.numel()
+
+    tp_local = env.unwrapped.track_points_world  # local-to-env points (x,y)
+    if len(tp_local) == 0:
+        reset_scene_to_default(env, env_ids)
+        return
+
+    origins = env.scene.env_origins
+
+    pos = torch.empty((n, 3), device=device, dtype=torch.float32)
+    yaw = torch.empty((n,), device=device, dtype=torch.float32)
+
+    for k, eid in enumerate(env_ids.tolist()):
+        pts = tp_local[eid]
+        if len(pts) < 2:
+            raise RuntimeError("Not enough track points to reset robot position.")
+        else:
+            L = len(pts)
+            j = int(torch.randint(0, L, (1,), device=device).item())
+
+            # current point
+            x0, y0 = pts[j]
+
+            # lookahead point (wrap around)
+            j2 = (j + lookahead) % L
+            x1, y1 = pts[j2]
+
+            # tangent direction
+            dx = float(x1) - float(x0)
+            dy = float(y1) - float(y0)
+
+            # if degenerate (same point), try a different lookahead
+            if dx == 0.0 and dy == 0.0:
+                j2 = (j + 1) % L
+                x1, y1 = pts[j2]
+                dx = float(x1) - float(x0)
+                dy = float(y1) - float(y0)
+
+            yaw_k = math.atan2(dy, dx)
+
+            # add small noise around track direction so car isn't perfectly aligned
+            if yaw_noise_std and yaw_noise_std > 0:
+                yaw_k += float(torch.randn((), device=device) * yaw_noise_std)
+            
+            # 50 % of the time, flip direction (180 deg)
+            if torch.rand((), device=device) < 0.5:
+                yaw_k += math.pi
+
+        # local -> world
+        pos[k, 0] = float(x0) + float(origins[eid, 0])
+        pos[k, 1] = float(y0) + float(origins[eid, 1])
+        pos[k, 2] = float(z) + float(origins[eid, 2])
+
+        yaw[k] = yaw_k
+
+    # yaw -> quaternion (w,x,y,z)
+    half = 0.5 * yaw
+    qw = torch.cos(half)
+    qz = torch.sin(half)
+    quat = torch.stack([qw, torch.zeros_like(qw), torch.zeros_like(qw), qz], dim=-1)
+
+    robot.write_root_pose_to_sim(torch.cat([pos, quat], dim=-1), env_ids=env_ids)
+    robot.write_root_velocity_to_sim(torch.zeros((n, 6), device=device), env_ids=env_ids)

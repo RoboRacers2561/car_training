@@ -261,37 +261,67 @@ def get_green_car_center(image, debug=False):
 
 
 def convert_coords(
-    isaaclab_coords: torch.Tensor,
+    input_coords: torch.Tensor,
     isaaclab_dimensions: tuple[float, float],
     image_dimensions: tuple[float, float],
     device=None,
-    dtype=torch.float32
+    dtype=torch.float32,
+    image_to_isaaclab: bool = False,
 ) -> torch.Tensor:
     """
-    Convert Isaaclab coordinates to image coordinates. 
+    Convert Isaaclab coordinates to image coordinates or vice versa. The default is Isaaclab to image.
     Isaaclab origin is at center, image origin is at top-left.
     Accepts and returns torch tensors.
     """
     # Ensure input is a tensor
-    if not torch.is_tensor(isaaclab_coords):
-        isaaclab_coords = torch.tensor(isaaclab_coords, dtype=dtype, device=device)
+    if not torch.is_tensor(input_coords):
+        input_coords = torch.tensor(input_coords, dtype=dtype, device=device)
 
     width_isaaclab, height_isaaclab = isaaclab_dimensions
     width_image, height_image = image_dimensions
 
     # Unpack coordinates
-    x_isaaclab = isaaclab_coords[..., 0]
-    y_isaaclab = isaaclab_coords[..., 1]
+    x_input = input_coords[..., 0]
+    y_input = input_coords[..., 1]
 
     # Convert coordinates
-    x_image = (x_isaaclab + width_isaaclab / 2) * (width_image / width_isaaclab)
-    y_image = (height_isaaclab / 2 - y_isaaclab) * (height_image / height_isaaclab)
+    if image_to_isaaclab:
+        x_output = (x_input / width_image) * width_isaaclab - (width_isaaclab / 2)
+        y_output = (height_isaaclab / 2) - (y_input / height_image) * height_isaaclab
+    else:
+        x_output = (x_input + width_isaaclab / 2) * (width_image / width_isaaclab)
+        y_output = (height_isaaclab / 2 - y_input) * (height_image / height_isaaclab)
 
     # Stack and return as tensor
-    image_coords = torch.stack((x_image, y_image), dim=-1)
+    output_coords = torch.stack((x_output, y_output), dim=-1)
     if device is not None:
-        image_coords = image_coords.to(device)
-    return image_coords.type(dtype)
+        output_coords = output_coords.to(device)
+    return output_coords.type(dtype)
+
+def convert_coords_list(
+    input_coords_list: list[tuple[float, float]],
+    isaaclab_dimensions: tuple[float, float],
+    image_dimensions: tuple[float, float],
+    device=None,
+    dtype=torch.float32,
+    image_to_isaaclab: bool = False,
+) -> list[tuple[float, float]]:
+    """
+    Convert a list of coordinates from Isaaclab to image coordinates or vice versa. The default is Isaaclab to image.
+    Isaaclab origin is at center, image origin is at top-left.
+    Accepts and returns list of tuples.
+    """
+    input_coords_tensor = torch.tensor(input_coords_list, dtype=dtype, device=device)
+    output_coords_tensor = convert_coords(
+        input_coords_tensor,
+        isaaclab_dimensions,
+        image_dimensions,
+        device=device,
+        dtype=dtype,
+        image_to_isaaclab=image_to_isaaclab,
+    )
+    output_coords_list = [tuple(coord.tolist()) for coord in output_coords_tensor]
+    return output_coords_list
 
 
 def rotate_torch_image(image: torch.Tensor, angle_degrees: torch.Tensor) -> torch.Tensor:
