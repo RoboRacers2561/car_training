@@ -148,7 +148,8 @@ class OverheadCameraCfg(TiledCameraCfg):
         focal_length=camera_params.optics.focal_length,
         focus_distance=camera_params.optics.focus_distance,
         horizontal_aperture=camera_params.optics.horizontal_aperture,
-        clipping_range=camera_params.optics.clipping_range
+        clipping_range=camera_params.optics.clipping_range,
+        f_stop=camera_params.optics.fstop,
     )
     width: int = camera_params.image.width
     height: int = camera_params.image.height

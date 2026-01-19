@@ -267,6 +267,7 @@ def convert_coords(
     device=None,
     dtype=torch.float32,
     image_to_isaaclab: bool = False,
+    preserve_aspect_ratio: bool = True,
 ) -> torch.Tensor:
     """
     Convert Isaaclab coordinates to image coordinates or vice versa. The default is Isaaclab to image.
@@ -284,13 +285,28 @@ def convert_coords(
     x_input = input_coords[..., 0]
     y_input = input_coords[..., 1]
 
+    sx = width_image / width_isaaclab
+    sy = height_image / height_isaaclab
+    s = min(sx, sy)   # preserve aspect ratio
+
+    pad_x = (width_image - s * width_isaaclab) / 2
+    pad_y = (height_image - s * height_isaaclab) / 2
+
     # Convert coordinates
-    if image_to_isaaclab:
-        x_output = (x_input / width_image) * width_isaaclab - (width_isaaclab / 2)
-        y_output = (height_isaaclab / 2) - (y_input / height_image) * height_isaaclab
+    if preserve_aspect_ratio:
+        if image_to_isaaclab:
+            x_output = (x_input - pad_x) / s - (width_isaaclab / 2)
+            y_output = (height_isaaclab / 2) - (y_input - pad_y) / s
+        else:
+            x_output = (x_input + width_isaaclab / 2) * s + pad_x
+            y_output = (height_isaaclab / 2 - y_input) * s + pad_y
     else:
-        x_output = (x_input + width_isaaclab / 2) * (width_image / width_isaaclab)
-        y_output = (height_isaaclab / 2 - y_input) * (height_image / height_isaaclab)
+        if image_to_isaaclab:
+            x_output = (x_input / width_image) * width_isaaclab - (width_isaaclab / 2)
+            y_output = (height_isaaclab / 2) - (y_input / height_image) * height_isaaclab
+        else:
+            x_output = (x_input + width_isaaclab / 2) * sx
+            y_output = (height_isaaclab / 2 - y_input) * sy
 
     # Stack and return as tensor
     output_coords = torch.stack((x_output, y_output), dim=-1)

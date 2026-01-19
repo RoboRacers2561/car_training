@@ -111,7 +111,7 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
 
 
         # cv2.circle(frame, (int(car_center[0]), int(car_center[1])), 5, (0, 0, 255), -1)  # Draw car center in red
-        # cv2.imwrite(f"debug_image_with_car_center_{index}.png", frame)  # Save the image with car center for debugging
+        # cv2.imwrite(f"debug_image_with_car_center_{i}.png", frame)  # Save the image with car center for debugging
         # print(f"type of car_center: {type(car_center)}, shape: {car_center.shape}")
         # print(f"Car center: {car_center}, Car velocity: {car_velocity}, Car speed: {car_speed}")
 

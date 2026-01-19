@@ -87,8 +87,12 @@ class CarTrainingEnv(ManagerBasedRLEnv):
                 track_points = find_track_points_from_image(image_np)
                 self.track_points.append(track_points)
 
+                # below is needed for random resetting
+                camera_width = self.scene.cfg.overhead_camera.width
+                camera_height = self.scene.cfg.overhead_camera.height
+                track_dimensions: tuple = self.scene.cfg.ground_plane.ground_plane_params.each_track_size
                 # convert to world coordinates
-                world_points = convert_coords_list(track_points, (10, 10), (512, 512), image_to_isaaclab=True)
+                world_points = convert_coords_list(track_points, track_dimensions, (camera_width, camera_height), image_to_isaaclab=True)
                 self.track_points_world.append(world_points)
 
 
