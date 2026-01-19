@@ -24,8 +24,8 @@ class OverheadCameraPoseParamsCfg:
 
 @configclass
 class OverheadCameraImageParamsCfg:
-    width: int = 256
-    height: int = 256
+    width: int = 512
+    height: int = 384
     data_types: list[str] = ["rgb"]
 
 

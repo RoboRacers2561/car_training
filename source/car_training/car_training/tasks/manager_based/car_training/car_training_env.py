@@ -5,7 +5,7 @@ from collections.abc import Sequence
 import torch
     
 import logging
-
+import cv2
 from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image
 from car_training.tasks.manager_based.car_training.mdp.utils.helpers import find_track_points_from_image
 from isaaclab.envs import ManagerBasedRLEnv
