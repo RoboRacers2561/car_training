@@ -17,15 +17,15 @@ class OverheadCameraOpticsParamsCfg:
 
 @configclass
 class OverheadCameraPoseParamsCfg:
-    pos: tuple[float, float, float] = (0.0, 0.0, 11.2)
+    pos: tuple[float, float, float] = (0.0, 0.0, 2.8)
     rot: tuple[float, float, float, float] = (1.57, 0.0, 0.0, -0.7071)
     convention: str = "opengl"
 
 
 @configclass
 class OverheadCameraImageParamsCfg:
-    width: int = 2048
-    height: int = 1536
+    width: int = 256
+    height: int = 256
     data_types: list[str] = ["rgb"]
 
 

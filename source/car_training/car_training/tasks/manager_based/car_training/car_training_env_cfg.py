@@ -283,7 +283,7 @@ class CurriculumCfg:
 @configclass
 class CarTrainingEnvCfg(ManagerBasedRLEnvCfg):
     # Scene settings
-    scene: CarTrainingSceneCfg = CarTrainingSceneCfg(num_envs=1, env_spacing=10.0)
+    scene: CarTrainingSceneCfg = CarTrainingSceneCfg(num_envs=1, env_spacing=2.5)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
