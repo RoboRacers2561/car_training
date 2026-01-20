@@ -20,7 +20,7 @@ class LeatherbackArticulationPropsCfg:
 
 @configclass
 class LeatherbackInitStateCfg:
-    pos: tuple[float, float, float] = (0.0, -3.3, 0.01)
+    pos: tuple[float, float, float] = (0.0, -0.825, 0.01) # This will also dictate the spawn of the car during NORMAL reset mode. If the size of the track changes, this needs to be updated.
     rot: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)
 
     # Put your joint defaults here too

@@ -84,7 +84,7 @@ class CarTrainingEnv(ManagerBasedRLEnv):
         if len(self.track_points) == 0:
             for index in range(self.num_envs):
                 image_np = self.static_track_image[index].detach().cpu().numpy()
-                track_points = find_track_points_from_image(image_np)
+                track_points = find_track_points_from_image(image_np, debug=True, image_name_save=f"track_points_{index}.png")
                 self.track_points.append(track_points)
 
                 # below is needed for random resetting

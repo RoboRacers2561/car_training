@@ -20,7 +20,7 @@ REAR_WHEEL_NAMES = ["Wheel__Upright__Rear_Right", "Wheel__Upright__Rear_Left"]
 FRONT_WHEEL_NAMES = ["Wheel__Knuckle__Front_Right", "Wheel__Knuckle__Front_Left"]
 FRONT_STEER_NAMES = ["Knuckle__Upright__Front_Right", "Knuckle__Upright__Front_Left"]
 
-THROTTLE_SCALE = 160.0
+THROTTLE_SCALE = 20
 STEER_SCALE = 1.0
 MAX_STEER = 0.6  # rad
 MAX_THROTTLE = 30
