@@ -247,7 +247,7 @@ class RewardsCfg:
             "robot_cfg": SceneEntityCfg("robot"),
             "completed_laps": 0,  # TODO: Replace with actual completed laps
             "total_laps": 3,      # TODO: Replace with actual total laps
-            "max_speed": 1,    # TODO: Replace with actual max speed
+            "max_speed": 2.75,    # TODO: Replace with actual max speed
         },
         weight=1.0,
     )
@@ -283,7 +283,7 @@ class CurriculumCfg:
 @configclass
 class CarTrainingEnvCfg(ManagerBasedRLEnvCfg):
     # Scene settings
-    scene: CarTrainingSceneCfg = CarTrainingSceneCfg(num_envs=1, env_spacing=4.0)
+    scene: CarTrainingSceneCfg = CarTrainingSceneCfg(num_envs=1, env_spacing=15.0)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
@@ -302,7 +302,7 @@ class CarTrainingEnvCfg(ManagerBasedRLEnvCfg):
         self.decimation = 2 # How many physics substeps the same action is applied for
         self.episode_length_s = 15
         # viewer settings
-        self.viewer.eye = (0.0, 0.0, 10.0)
+        self.viewer.eye = (0.0, 0.0, 40.0)
         # simulation settings
         self.sim.dt = 0.05
         self.sim.render_interval = self.decimation

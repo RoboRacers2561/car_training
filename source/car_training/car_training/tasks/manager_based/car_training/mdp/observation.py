@@ -248,8 +248,9 @@ def aligned_robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torc
 
     heading = asset.data.heading_w  # (N,)
 
-    cos_heading = torch.cos(-heading)  # (N,)
-    sin_heading = torch.sin(-heading)  # (N,)
+    # Heading + pi/2 to rotate velocity into car frame
+    cos_heading = torch.cos(-heading - np.pi/2) # (N,)
+    sin_heading = torch.sin(-heading - np.pi/2) # (N,)
 
     rot_matrix = torch.stack(
         [

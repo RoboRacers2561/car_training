@@ -70,7 +70,8 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
     # rgb_cpu = rgb.detach().cpu().numpy()
 
     car_centers = robot_pos(env, robot_cfg, do_convert_coords=True).detach().cpu().numpy()
-    car_vels = robot_vel(env, robot_cfg).detach().cpu().numpy()
+    # car_vels = robot_vel(env, robot_cfg).detach().cpu().numpy()
+    car_vels = aligned_robot_vel(env, robot_cfg).detach().cpu().numpy()
     car_speeds = np.linalg.norm(car_vels, axis=1)
 
     num_envs = car_centers.shape[0]
@@ -105,7 +106,7 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
         # debug_cropped_image = cropped_image[0, 0].cpu().numpy() * 255
         # debug_cropped_image = cv2.cvtColor(debug_cropped_image.astype(np.uint8), cv2.COLOR_GRAY2BGR)
 
-        # cv2.arrowedLine(debug_cropped_image, (32, 32), (32 + int(car_vels[i][0]*30), 32 + int(car_vels[i][1]*30)), (255, 0, 0), 2)  # Draw velocity vector in blue
+        # cv2.arrowedLine(debug_cropped_image, (24, 24), (24 + int(car_vels[i][0]*30), 24 + int(car_vels[i][1]*30)), (255, 0, 0), 2)  # Draw velocity vector in blue
         # cv2.imwrite(f"debug_cropped_image_with_velocity_{i}.png", debug_cropped_image)  # Save the cropped image with velocity vector for debugging
 
 
