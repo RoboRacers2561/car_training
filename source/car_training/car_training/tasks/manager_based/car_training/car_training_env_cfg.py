@@ -230,8 +230,9 @@ class EventCfg:
         params={
             "asset_cfg": SceneEntityCfg("robot"),
             "z": 0.05,
-            "yaw_noise_std": 0.2, # radians, e.g. 0.2 ~= 11.5 degrees
+            "yaw_noise_std": 0.0, # radians, e.g. 0.2 ~= 11.5 degrees
             "lookahead": 5,       # how many points ahead to compute tangent
+            "xy_rand_radius": 0.5
         },
     )
 
