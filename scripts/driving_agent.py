@@ -38,7 +38,6 @@ import logging
 import car_training.tasks  # noqa: F401
 import carb
 import omni
-from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image
 
 class WasdTeleop:
     def __init__(self, throttle_speed=1.0, steer_angle=0.0, number_of_envs=1):
@@ -97,15 +96,12 @@ def main():
     # reset environment
     env.reset()
 
-    # initialize static track image
-    init_static_track_image(env.unwrapped, camera_name="overhead_camera")
-
     print("Joint names:", env.unwrapped.scene["robot"].data.joint_names)
 
     number_of_envs = env.unwrapped.num_envs
     print(f"Number of environments: {number_of_envs}")
     
-    teleop = WasdTeleop(throttle_speed=3.0, steer_angle=-0.2, number_of_envs=number_of_envs)
+    teleop = WasdTeleop(throttle_speed=3.0, steer_angle=0.0, number_of_envs=number_of_envs)
     # simulate environment
     while simulation_app.is_running():
         # run everything in inference mode

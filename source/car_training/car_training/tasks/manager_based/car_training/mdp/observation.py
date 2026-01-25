@@ -21,7 +21,9 @@ from car_training.tasks.manager_based.car_training.mdp.utils.training_logging im
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
-CROPPED_IMAGE_SIZE = 64
+CROPPED_IMAGE_SIZE = 48 # Size of the cropped track neighborhood image
+FRONT_STEER_NAMES = ["Knuckle__Upright__Front_Right", "Knuckle__Upright__Front_Left"]
+
 
 _LOGGER: Optional[GpuSafeLogger] = None
 
@@ -42,87 +44,6 @@ def get_logger(env: ManagerBasedRLEnv) -> GpuSafeLogger:
         _LOGGER = base.getChild(short_name)
     return _LOGGER
 
-def track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
-    """
-    Vectorized GPU crop around the car using grid_sample.
-
-    Returns:
-        crops: (N, 1, crop, crop) grayscale images
-    """
-    logger = get_logger(env)
-
-    # TODO: remove attribute check - fix in env setup since this is not on gpu
-    if hasattr(env.unwrapped, 'static_track_image') and env.unwrapped.static_track_image is not None:
-        pass
-    else:
-        # return a dummy image if static image is not available
-        num_envs = env.unwrapped.num_envs
-        logger.warning("static track image not found, returning dummy gray image")
-        return torch.zeros((num_envs, 1, CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), device=env.unwrapped.device, dtype=torch.float32)
-
-    device = env.unwrapped.device
-
-    imgs = env.unwrapped.static_track_image
-    N, H, W, _ = imgs.shape
-    logger.debug(f"Static track image shape: number of envs={N}, H={H}, W={W}")
-
-    # Convert to float in [0, 1] and NCHW
-    if imgs.dtype != torch.float32:
-        imgs = imgs.float() / 255.0
-    imgs = imgs.permute(0, 3, 1, 2)  # (N, 3, H, W)
-    car_xy = robot_pos(env, asset_cfg, do_convert_coords=True)
-    logger.debug_lazy("Car positions (image coords): %s", lambda: car_xy)
-
-    # Normalize to [-1, 1] for grid_sample
-    cx = 2.0 * car_xy[:, 0] / (W - 1) - 1.0
-    cy = 2.0 * car_xy[:, 1] / (H - 1) - 1.0
-
-    lin = torch.linspace(-1, 1, CROPPED_IMAGE_SIZE, device=device)
-    dy, dx = torch.meshgrid(lin, lin, indexing="ij")
-
-    # Scale offsets to image size
-    dx = dx[None] * (CROPPED_IMAGE_SIZE / W)
-    dy = dy[None] * (CROPPED_IMAGE_SIZE / H)
-    logger.debug(f"Crop offsets dx shape: {dx.shape}, dy shape: {dy.shape}")
-
-    # Shift grid to each car center
-    grid = torch.stack(
-        (
-            cx[:, None, None] + dx,
-            cy[:, None, None] + dy,
-        ),
-        dim=-1,
-    )  # (N, crop, crop, 2)
-
-    # Sample with border padding
-    crops = F.grid_sample(
-        imgs,
-        grid,
-        mode="bilinear",
-        padding_mode="border",
-        align_corners=True,
-    )  # (N, 3, crop, crop)
-
-    # Convert to grayscale
-    gray_crops = 0.2989 * crops[:, 0:1, :, :] + 0.5870 * crops[:, 1:2, :, :] + 0.1140 * crops[:, 2:3, :, :]  # (N, 1, crop, crop)
-
-    gray_crops = (gray_crops > 0.5).float()
-    # log the shape of gray crops
-
-    logger.debug("Obtained track neighborhood images.")
-    logger.debug_lazy("Track neighborhood image shape: %s", lambda: list(gray_crops.shape))
-
-    logger.debug_lazy("Track neighborhood image min/max: %s", lambda: list((gray_crops.min().item(), gray_crops.max().item())))
-
-    # print image shape for debugging
-    # print(f"track neighborhood image shape: {gray_crops.shape}")
-
-    # save debug image
-    # debug_img = gray_crops[0, 0].cpu().numpy() * 255
-    # cv2.imwrite("debug_track_neighborhood_image.png", debug_img)
-
-    return gray_crops
-
 
 def robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     """
@@ -139,6 +60,9 @@ def robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor
     asset: RigidObject = env.scene[asset_cfg.name]
 
     relative_vel = asset.data.root_com_lin_vel_w[:, :2] # Return x, y velocity
+
+    # make y velocity negative to match image coordinates
+    relative_vel[:, 1] *= -1
 
     logger.debug_lazy("Car velocities: %s", lambda: relative_vel)
     return relative_vel
@@ -305,3 +229,58 @@ def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEnt
     # cv2.imwrite("debug_track_neighborhood_image.png", debug_img)
 
     return gray_crops
+
+def aligned_robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """
+    Calculate the car's velocity in the car's local frame, aligned with its heading.
+
+    Args:
+        env: The environment instance.
+        asset_cfg: The configuration of the car asset.
+
+    Returns:
+        torch.Tensor: The velocity vector of the car in its local frame.
+    """
+    logger = get_logger(env)
+    asset: RigidObject = env.scene[asset_cfg.name]
+
+    relative_vel = asset.data.root_com_lin_vel_w[:, :2]  # (N, 2)
+
+    heading = asset.data.heading_w  # (N,)
+
+    # Heading + pi/2 to rotate velocity into car frame
+    cos_heading = torch.cos(-heading - np.pi/2) # (N,)
+    sin_heading = torch.sin(-heading - np.pi/2) # (N,)
+
+    rot_matrix = torch.stack(
+        [
+            torch.stack([cos_heading, -sin_heading], dim=-1),
+            torch.stack([sin_heading, cos_heading], dim=-1),
+        ],
+        dim=-2,
+    )  # (N, 2, 2)
+
+    local_vel = torch.bmm(rot_matrix, relative_vel.unsqueeze(-1)).squeeze(-1)  # (N, 2)
+
+    logger.debug_lazy("Car local frame velocities: %s", lambda: local_vel)
+    return local_vel
+
+def front_wheels_angle(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """
+    Get the front wheels steering angle of the car.
+
+    
+    """
+    logger = get_logger(env)
+    # robot: Articulation = env.scene[asset_cfg.asset_name]
+    robot = env.unwrapped.scene["robot"]
+
+    front_ids, _ = robot.find_joints(FRONT_STEER_NAMES)
+
+    front_right_angle = robot.data.joint_pos[:, front_ids][:, 0] # Num_envs x 1
+    front_left_angle = robot.data.joint_pos[:, front_ids][:, 1] # Num_envs x 1
+
+    logger.debug_lazy("Front right wheel angle: %s", lambda: front_right_angle)
+    logger.debug_lazy("Front left wheel angle: %s", lambda: front_left_angle)
+
+    return front_right_angle, front_left_angle

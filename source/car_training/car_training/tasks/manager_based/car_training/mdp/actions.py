@@ -17,12 +17,13 @@ import os
 
 
 REAR_WHEEL_NAMES = ["Wheel__Upright__Rear_Right", "Wheel__Upright__Rear_Left"]
+FRONT_WHEEL_NAMES = ["Wheel__Knuckle__Front_Right", "Wheel__Knuckle__Front_Left"]
 FRONT_STEER_NAMES = ["Knuckle__Upright__Front_Right", "Knuckle__Upright__Front_Left"]
 
-THROTTLE_SCALE = 20.0
+THROTTLE_SCALE = 20
 STEER_SCALE = 1.0
 MAX_STEER = 0.6  # rad
-MAX_THROTTLE = 30
+MAX_THROTTLE = 75
 MIN_THROTTLE = 10
 
 def ackermann_to_wheel_angles(delta_center: torch.Tensor,
@@ -87,6 +88,10 @@ class ThrottleSteerAckermannAction(ActionTerm):
         self._action_dim = 2
         self.logger.debug(f"Action dimension: {self._action_dim}")
 
+        self._action_curr = torch.full((env.num_envs, self._action_dim), float('nan'), device=env.device) # current action
+        self._action_prev = torch.full((env.num_envs, self._action_dim), float('nan'), device=env.device) # previous action
+        self._action_prev2 = torch.full((env.num_envs, self._action_dim), float('nan'), device=env.device) # action before previous
+
     @property
     def action_dim(self):
         return self._action_dim
@@ -101,6 +106,30 @@ class ThrottleSteerAckermannAction(ActionTerm):
     @property
     def processed_actions(self) -> torch.Tensor:
         return self._processed_actions
+    
+    @property
+    def action_prev(self) -> torch.Tensor | None:
+        return self._action_prev
+    
+    @property
+    def action_prev2(self) -> torch.Tensor | None:
+        return self._action_prev2
+    
+    @property
+    def action_curr(self) -> torch.Tensor | None:
+        return self._action_curr
+    
+    @action_prev.setter
+    def action_prev(self, value: torch.Tensor):
+        self._action_prev = value
+
+    @action_prev2.setter
+    def action_prev2(self, value: torch.Tensor):
+        self._action_prev2 = value
+
+    @action_curr.setter
+    def action_curr(self, value: torch.Tensor):
+        self._action_curr = value
 
     def process_actions(self, actions: torch.Tensor):
         """
@@ -110,8 +139,8 @@ class ThrottleSteerAckermannAction(ActionTerm):
         self._raw_actions = actions
 
         # Map throttle from [-1, 1] → [0, 1]
-        throttle_norm = 0.5 * (actions[:, 0] + 1.0)
-        throttle = throttle_norm * self.throttle_scale
+        # throttle_norm = 0.5 * (actions[:, 0] + 1.0)
+        throttle = actions[:, 0] * self.throttle_scale
         throttle = throttle.clamp(MIN_THROTTLE, MAX_THROTTLE)
         self.logger.debug_lazy("Processed throttle commands: %s", lambda: throttle)
 
@@ -126,6 +155,8 @@ class ThrottleSteerAckermannAction(ActionTerm):
         self.logger.debug("In apply_actions()")
         a = self._processed_actions
 
+        self._action_curr = a.clone()  # store current action
+        
         throttle = a[:, 0]
         steer = a[:, 1]
         # Rear wheel velocities (same for both rear wheels)
@@ -140,6 +171,31 @@ class ThrottleSteerAckermannAction(ActionTerm):
         # Apply
         self.robot.set_joint_velocity_target(rear_vel, joint_ids=self.rear_ids)
         self.robot.set_joint_position_target(front_pos, joint_ids=self.front_ids)
+
+    def reset_history(self, env_ids: list[int] | None) -> None:
+        """
+        Reset the action history for smooth steering penalty calculation. This is needed on env reset.
+
+        :param env_ids: IDs of the environments to reset.
+        :type env_ids: list[int] | None
+
+        """
+
+        self._action_curr[env_ids] = torch.full((len(env_ids), self.action_dim), float('nan'), device=self._action_curr.device)
+        self._action_prev[env_ids] = torch.full((len(env_ids), self.action_dim), float('nan'), device=self._action_prev.device)
+        self._action_prev2[env_ids] = torch.full((len(env_ids), self.action_dim), float('nan'), device=self._action_prev2.device)  
+        
+    def reset(self, env_ids: list[int] | None) -> None:
+        """
+        Reset the action term and its history.
+
+        :param env_ids: IDs of the environments to reset.
+        :type env_ids: list[int] | None
+        """
+        super().reset()
+
+        self.reset_history(env_ids=env_ids)
+
     
     def record_actions_to_file(self, throttle_tensor, steering_tensor):
         """

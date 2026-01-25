@@ -21,12 +21,17 @@ from isaaclab.actuators import ImplicitActuatorCfg
 
 from . import mdp
 from car_training.tasks.manager_based.car_training.mdp.rewards import get_total_reward
-from car_training.tasks.manager_based.car_training.mdp.observation import  robot_vel, track_neighborhood_image, robot_heading, forward_speed, aligned_track_neighborhood_image
+from car_training.tasks.manager_based.car_training.mdp.observation import  (
+    aligned_track_neighborhood_image,
+    robot_vel,
+    aligned_robot_vel
+)
 from car_training.tasks.manager_based.car_training.mdp.termination import off_track_termination
 from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSteerAckermannAction
 from car_training.tasks.manager_based.car_training.configs.leatherback_params import LeatherbackParamsCfg
 from car_training.tasks.manager_based.car_training.configs.plane_track_params import GroundPlaceCfg, TrackParamsCfg
 from car_training.tasks.manager_based.car_training.configs.overhead_camera_params import OverheadCameraParamsCfg
+from car_training.tasks.manager_based.car_training.mdp.events import reset_robot_root_random
 
 import os
 from pathlib import Path
@@ -102,6 +107,13 @@ class PlaneCfg(AssetBaseCfg):
     spawn: sim_utils.GroundPlaneCfg = sim_utils.GroundPlaneCfg(
         size=ground_plane_params.size,
         visible=ground_plane_params.visible,
+        physics_material=sim_utils.RigidBodyMaterialCfg(
+            friction_combine_mode="multiply",
+            restitution_combine_mode="multiply",
+            static_friction=1.0,
+            dynamic_friction=1.0,
+            restitution=0.0,
+        ),
     )
 
 
@@ -136,7 +148,8 @@ class OverheadCameraCfg(TiledCameraCfg):
         focal_length=camera_params.optics.focal_length,
         focus_distance=camera_params.optics.focus_distance,
         horizontal_aperture=camera_params.optics.horizontal_aperture,
-        clipping_range=camera_params.optics.clipping_range
+        clipping_range=camera_params.optics.clipping_range,
+        f_stop=camera_params.optics.fstop,
     )
     width: int = camera_params.image.width
     height: int = camera_params.image.height
@@ -192,7 +205,7 @@ class ObservationsCfg:
         image = ObsTerm(func=aligned_track_neighborhood_image,
                         params={"asset_cfg": SceneEntityCfg("robot"),},
                         clip=(0.0, 255.0),)
-        joint_vel_rel = ObsTerm(func=robot_vel,
+        joint_vel_rel = ObsTerm(func=aligned_robot_vel,
                                 params={"asset_cfg": SceneEntityCfg("robot")},
                                 )
 
@@ -209,8 +222,19 @@ class EventCfg:
     """Configuration for events."""
 
     # reset
-    reset_robot_position = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
+    # reset_robot_position = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
+    reset_robot_position = EventTerm(
+        func=reset_robot_root_random,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot"),
+            "z": 0.05,
+            "yaw_noise_std": 0.0, # radians, e.g. 0.2 ~= 11.5 degrees
+            "lookahead": 5,       # how many points ahead to compute tangent
+            "xy_rand_radius": 0.5
+        },
+    )
 
 @configclass
 class RewardsCfg:
@@ -224,7 +248,7 @@ class RewardsCfg:
             "robot_cfg": SceneEntityCfg("robot"),
             "completed_laps": 0,  # TODO: Replace with actual completed laps
             "total_laps": 3,      # TODO: Replace with actual total laps
-            "max_speed": 1,    # TODO: Replace with actual max speed
+            "max_speed": 2.75,    # TODO: Replace with actual max speed
         },
         weight=1.0,
     )
@@ -260,7 +284,7 @@ class CurriculumCfg:
 @configclass
 class CarTrainingEnvCfg(ManagerBasedRLEnvCfg):
     # Scene settings
-    scene: CarTrainingSceneCfg = CarTrainingSceneCfg(num_envs=1, env_spacing=10.0)
+    scene: CarTrainingSceneCfg = CarTrainingSceneCfg(num_envs=1, env_spacing=15.0)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()

@@ -18,7 +18,7 @@ logger = logging.getLogger("car_training" + __name__.rpartition(".car_training")
 
 MAX_DISTANCE_FROM_LINE = 45
 
-def find_track_points_from_image(image: np.ndarray, debug = False):
+def find_track_points_from_image(image: np.ndarray, debug = False, image_name_save: str = "debug_track_points.png"):
     """
     Process the image to find track points.
 
@@ -33,7 +33,7 @@ def find_track_points_from_image(image: np.ndarray, debug = False):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     # Threshold (invert so line is white)
-    _, binary = cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY_INV)
+    _, binary = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY_INV)
 
     # Optional: clean small noise
     kernel = np.ones((3,3), np.uint8)
@@ -66,7 +66,7 @@ def find_track_points_from_image(image: np.ndarray, debug = False):
         cv2.imwrite(f"{TEST_DATA_PATH}/debug_gray.png", gray)
         debug_contour_image = image.copy()
         cv2.drawContours(debug_contour_image, contours, -1, (0, 255, 0), 2)
-        cv2.imwrite(f"{TEST_DATA_PATH}/debug_contours.png", debug_contour_image)
+        cv2.imwrite(f"{TEST_DATA_PATH}/{image_name_save}", debug_contour_image)
 
     return track_points
 
@@ -261,37 +261,83 @@ def get_green_car_center(image, debug=False):
 
 
 def convert_coords(
-    isaaclab_coords: torch.Tensor,
+    input_coords: torch.Tensor,
     isaaclab_dimensions: tuple[float, float],
     image_dimensions: tuple[float, float],
     device=None,
-    dtype=torch.float32
+    dtype=torch.float32,
+    image_to_isaaclab: bool = False,
+    preserve_aspect_ratio: bool = True,
 ) -> torch.Tensor:
     """
-    Convert Isaaclab coordinates to image coordinates. 
+    Convert Isaaclab coordinates to image coordinates or vice versa. The default is Isaaclab to image.
     Isaaclab origin is at center, image origin is at top-left.
     Accepts and returns torch tensors.
     """
     # Ensure input is a tensor
-    if not torch.is_tensor(isaaclab_coords):
-        isaaclab_coords = torch.tensor(isaaclab_coords, dtype=dtype, device=device)
+    if not torch.is_tensor(input_coords):
+        input_coords = torch.tensor(input_coords, dtype=dtype, device=device)
 
     width_isaaclab, height_isaaclab = isaaclab_dimensions
     width_image, height_image = image_dimensions
 
     # Unpack coordinates
-    x_isaaclab = isaaclab_coords[..., 0]
-    y_isaaclab = isaaclab_coords[..., 1]
+    x_input = input_coords[..., 0]
+    y_input = input_coords[..., 1]
+
+    sx = width_image / width_isaaclab
+    sy = height_image / height_isaaclab
+    s = min(sx, sy)   # preserve aspect ratio
+
+    pad_x = (width_image - s * width_isaaclab) / 2
+    pad_y = (height_image - s * height_isaaclab) / 2
 
     # Convert coordinates
-    x_image = (x_isaaclab + width_isaaclab / 2) * (width_image / width_isaaclab)
-    y_image = (height_isaaclab / 2 - y_isaaclab) * (height_image / height_isaaclab)
+    if preserve_aspect_ratio:
+        if image_to_isaaclab:
+            x_output = (x_input - pad_x) / s - (width_isaaclab / 2)
+            y_output = (height_isaaclab / 2) - (y_input - pad_y) / s
+        else:
+            x_output = (x_input + width_isaaclab / 2) * s + pad_x
+            y_output = (height_isaaclab / 2 - y_input) * s + pad_y
+    else:
+        if image_to_isaaclab:
+            x_output = (x_input / width_image) * width_isaaclab - (width_isaaclab / 2)
+            y_output = (height_isaaclab / 2) - (y_input / height_image) * height_isaaclab
+        else:
+            x_output = (x_input + width_isaaclab / 2) * sx
+            y_output = (height_isaaclab / 2 - y_input) * sy
 
     # Stack and return as tensor
-    image_coords = torch.stack((x_image, y_image), dim=-1)
+    output_coords = torch.stack((x_output, y_output), dim=-1)
     if device is not None:
-        image_coords = image_coords.to(device)
-    return image_coords.type(dtype)
+        output_coords = output_coords.to(device)
+    return output_coords.type(dtype)
+
+def convert_coords_list(
+    input_coords_list: list[tuple[float, float]],
+    isaaclab_dimensions: tuple[float, float],
+    image_dimensions: tuple[float, float],
+    device=None,
+    dtype=torch.float32,
+    image_to_isaaclab: bool = False,
+) -> list[tuple[float, float]]:
+    """
+    Convert a list of coordinates from Isaaclab to image coordinates or vice versa. The default is Isaaclab to image.
+    Isaaclab origin is at center, image origin is at top-left.
+    Accepts and returns list of tuples.
+    """
+    input_coords_tensor = torch.tensor(input_coords_list, dtype=dtype, device=device)
+    output_coords_tensor = convert_coords(
+        input_coords_tensor,
+        isaaclab_dimensions,
+        image_dimensions,
+        device=device,
+        dtype=dtype,
+        image_to_isaaclab=image_to_isaaclab,
+    )
+    output_coords_list = [tuple(coord.tolist()) for coord in output_coords_tensor]
+    return output_coords_list
 
 
 def rotate_torch_image(image: torch.Tensor, angle_degrees: torch.Tensor) -> torch.Tensor:
@@ -318,22 +364,27 @@ def rotate_torch_image(image: torch.Tensor, angle_degrees: torch.Tensor) -> torc
 
 
 if __name__ == "__main__":
-    test_image = cv2.imread("debug_image_testing.png")
-    car_center = get_green_car_center(test_image, debug=True)
-    print(f"Detected green car center: {car_center}")
+    # test_image = cv2.imread("debug_image_testing.png")
+    # car_center = get_green_car_center(test_image, debug=True)
+    # print(f"Detected green car center: {car_center}")
 
-    track_points = find_track_points_from_image(test_image, debug=True)
-    print(f"Number of track points detected: {len(track_points)}")
+    track_images_folder = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/scene_assets/track_images")
 
-    closest_point = __find_closest_track_point(car_center, track_points)
-    print(f"Closest track point to car center: {closest_point}")
+    for i in range(12):
+        track_img_file = os.path.join(track_images_folder, f"track_{i}.png")
+        image = cv2.imread(track_img_file)
+        track_points = find_track_points_from_image(image, debug=True, image_name_save=f"debug_track_points_{i}.png")
+    # print(f"Number of track points detected: {len(track_points)}")
 
-    isaaclab_coords = (2.5, 2.5)
-    isaaclab_dimensions = (10.0, 10.0)  # Example dimensions
-    image_dimensions = (512, 512)  # Example image dimensions
-    image_coords = convert_coords(isaaclab_coords, isaaclab_dimensions, image_dimensions)
-    print(f"Converted image coordinates: {image_coords}")
+    # closest_point = __find_closest_track_point(car_center, track_points)
+    # print(f"Closest track point to car center: {closest_point}")
 
-    cv2.circle(test_image, (int(closest_point[0]), int(closest_point[1])), 5, (0, 255, 0), -1)
-    cv2.imshow("Car and Closest Track Point", test_image)
-    cv2.waitKey(0)
+    # isaaclab_coords = (2.5, 2.5)
+    # isaaclab_dimensions = (10.0, 10.0)  # Example dimensions
+    # image_dimensions = (512, 512)  # Example image dimensions
+    # image_coords = convert_coords(isaaclab_coords, isaaclab_dimensions, image_dimensions)
+    # print(f"Converted image coordinates: {image_coords}")
+
+    # cv2.circle(test_image, (int(closest_point[0]), int(closest_point[1])), 5, (0, 255, 0), -1)
+    # cv2.imshow("Car and Closest Track Point", test_image)
+    # cv2.waitKey(0)

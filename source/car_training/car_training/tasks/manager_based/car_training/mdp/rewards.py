@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Optional
 from isaaclab.assets import Articulation
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils.math import wrap_to_pi
-from isaaclab.utils import convert_dict_to_backend
 from isaaclab.assets import RigidObject
 
 if TYPE_CHECKING:
@@ -22,7 +21,7 @@ import cv2
 import logging
 
 from car_training.tasks.manager_based.car_training.mdp.utils.helpers import *
-from car_training.tasks.manager_based.car_training.mdp.observation import robot_pos, robot_vel, robot_heading
+from car_training.tasks.manager_based.car_training.mdp.observation import robot_pos, aligned_robot_vel, robot_vel
 from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import GpuSafeLogger
 
 _LOGGER: Optional[GpuSafeLogger] = None
@@ -64,49 +63,56 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
 
     logger.debug("Calculating total reward...")
 
-    camera: Articulation = env.scene[camera_cfg.name]
-    
-    cam_data = convert_dict_to_backend(
-                {k: v for k, v in camera.data.output.items()}, backend="numpy")
+    # camera: Articulation = env.scene[camera_cfg.name]
 
-    # compute the reward
+    # rgb = camera.data.output['rgb']
 
-    H, W, _ = cam_data['rgb'][0].shape
-    logger.debug(f"Camera image shape: H={H}, W={W}")
-    
+    # rgb_cpu = rgb.detach().cpu().numpy()
 
-    # Here I think we can have access to the sensors and images for each copy of the simulation.
-    # We can compute the reward for each copy separately and then combine them.
+    car_centers = robot_pos(env, robot_cfg, do_convert_coords=True).detach().cpu().numpy()
+    # car_vels = robot_vel(env, robot_cfg).detach().cpu().numpy()
+    car_vels = aligned_robot_vel(env, robot_cfg).detach().cpu().numpy()
+    car_speeds = np.linalg.norm(car_vels, axis=1)
 
-    all_rewards = []
-    index = 0
-    # TODO: I added index here because the car_center is expected to be a tuple or list not a list[list], but I think 
-    # there is a better way to do this, especially since we are looping through all images, which is O(num_envs), maybe there
-    # is a way to vectorize this.
-    for frame in cam_data['rgb']:
-        # print(f"frames.shape:{frames.shape, type(frames)}")
-        # cv2.imwrite("debug_image.png", frame)  # Save the image for debugging
-        # print("Saved debug_image.png")
+    num_envs = car_centers.shape[0]
+    rewards = np.empty((num_envs,), dtype=np.float32)
+
+    for i in range(num_envs):
         # for each copy of the simulation find the track points and compute the reward
-        track_points_list = find_track_points_from_image(frame)
-        car_center = robot_pos(env, robot_cfg, do_convert_coords=True).cpu().numpy()[index]
-        car_velocity = robot_vel(env, robot_cfg).cpu().numpy()[index]
-        car_speed = np.linalg.norm(car_velocity)
+        # frame = rgb_cpu[i]
+        track_points_list = env.unwrapped.track_points[i]
+
+        # draw track points for debugging
+        # for point in track_points_list:
+        #     cv2.circle(frame, (int(point[0]), int(point[1])), 3, (0, 255, 0), -1)  # Draw track points in green
+        # cv2.imwrite(f"debug_image_with_track_points_{i}.png", frame)  # Save the image with track points for debugging
+        
+        car_center = car_centers[i]
+        car_speed = float(car_speeds[i])
         # car_heading = robot_heading(env, robot_cfg).cpu().numpy()[index]
         logger.debug(f"car_speed type: {type(car_speed)}")
         logger.debug_lazy("car speed %s", lambda: car_speed)
 
         # draw the velocity vector on the image for debugging
         # start_point = (int(car_center[0]), int(car_center[1]))
-        # end_point = (int(car_center[0] + car_velocity[0]*100), int(car_center[1] + car_velocity[1]*100))
+        # end_point = (int(car_center[0] + car_vels[i][0]*100), int(car_center[1] + car_vels[i][1]*100))
         # cv2.arrowedLine(frame, start_point, end_point, (255, 0, 0), 2)  # Draw velocity vector in blue
         # end_point = (int(car_center[0] + 50 * car_heading[0]), int(car_center[1] + 50 * car_heading[1]))
         # cv2.arrowedLine(frame, start_point, end_point, (255, 0, 0), 2)  # Draw heading vector in blue
         # cv2.circle(frame, (int(car_center[0]), int(car_center[1])), 5, (0, 255, 0), -1)  # Draw car center in green
-        # cv2.imwrite(f"debug_image_with_velocity_{index}.png", frame)  # Save the image with velocity vector for debugging
+        # cv2.imwrite(f"debug_image_with_velocity_{i}.png", frame)  # Save the image with velocity vector for debugging
+
+        # cropped_image = env.observation_manager.compute_group("policy")["image"]
+        # debug_cropped_image = cropped_image[0, 0].cpu().numpy() * 255
+        # debug_cropped_image = cv2.cvtColor(debug_cropped_image.astype(np.uint8), cv2.COLOR_GRAY2BGR)
+
+        # cv2.arrowedLine(debug_cropped_image, (24, 24), (24 + int(car_vels[i][0]*30), 24 + int(car_vels[i][1]*30)), (255, 0, 0), 2)  # Draw velocity vector in blue
+        # cv2.imwrite(f"debug_cropped_image_with_velocity_{i}.png", debug_cropped_image)  # Save the cropped image with velocity vector for debugging
+
+
 
         # cv2.circle(frame, (int(car_center[0]), int(car_center[1])), 5, (0, 0, 255), -1)  # Draw car center in red
-        # cv2.imwrite(f"debug_image_with_car_center_{index}.png", frame)  # Save the image with car center for debugging
+        # cv2.imwrite(f"debug_image_with_car_center_{i}.png", frame)  # Save the image with car center for debugging
         # print(f"type of car_center: {type(car_center)}, shape: {car_center.shape}")
         # print(f"Car center: {car_center}, Car velocity: {car_velocity}, Car speed: {car_speed}")
 
@@ -119,10 +125,76 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
 
         total_reward = (distance_reward + velocity_reward_value + alive_reward - track_penalty)
 
-        all_rewards.append(total_reward)
-        logger.debug(f"Simulation {index}: Distance Reward: {distance_reward}, Velocity Reward: {velocity_reward_value}, Alive Reward: {alive_reward}, Track Penalty: {track_penalty}, Total Reward: {total_reward}")
-        index += 1
+        rewards[i] = total_reward
+        logger.debug(f"Simulation {i}: Distance Reward: {distance_reward}, Velocity Reward: {velocity_reward_value}, Alive Reward: {alive_reward}, Track Penalty: {track_penalty}, Total Reward: {total_reward}")
 
-    total_reward = torch.tensor(all_rewards, dtype=torch.float32, device=env.device)
+    total_reward_no_smoothing = torch.from_numpy(rewards).to(device=env.device)
+    smooth_steering = steering_jerk_penalty(env, weight=0.0001)
+    total_reward = total_reward_no_smoothing + smooth_steering
+    logger.debug_lazy("Total reward with smooth steering: %s", lambda: total_reward)
+
     return total_reward
 
+
+
+def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.Tensor:
+    """
+    Reward for smooth steering by penalizing large changes in steering angle.
+
+    :param weight: Weight of the smooth steering reward.
+    :type weight: float
+
+    :return: Smooth steering reward.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+
+    logger.debug("Calculating steering jerk penalty...")
+
+    drive = env.action_manager._terms["drive"]
+
+    action_now = drive.action_curr
+    if torch.isnan(action_now).any():
+        raise ValueError("Current action contains NaN in steering_jerk_penalty.")
+
+    # Initialize history on first call
+    if torch.isnan(drive.action_prev).all() and torch.isnan(drive.action_prev2).all():
+        logger.debug("Initializing action history for steering jerk penalty.")
+        drive.action_prev = action_now.clone()
+        drive.action_prev2 = action_now.clone()
+        return torch.zeros((env.num_envs,), device=env.device)
+    elif torch.isnan(drive.action_prev).any() or torch.isnan(drive.action_prev2).any():
+        # Not all NaN, but some NaN values exist which is because of reset of some envs
+        logger.debug("Partial NaN detected in action history; initializing missing values for steering jerk penalty.")
+        nan_prev = torch.isnan(drive.action_prev).any(dim=1)
+        nan_prev2 = torch.isnan(drive.action_prev2).any(dim=1)
+        drive.action_prev[nan_prev] = action_now[nan_prev].clone()
+        drive.action_prev2[nan_prev2] = action_now[nan_prev2].clone()
+
+
+    steer_now  = action_now[:, 1]
+    steer_prev = drive.action_prev[:, 1]
+    steer_prev2= drive.action_prev2[:, 1]
+
+    # dt is optional; keep if you want rate-invariance
+    dt = env.cfg.sim.dt * env.cfg.decimation
+    j = (steer_now - 2.0 * steer_prev + steer_prev2) / (dt * dt)
+
+    penalty = -weight * (j * j)
+
+    logger.debug_lazy("Steering angles now: %s", lambda: steer_now)
+    logger.debug_lazy("Steering angles prev: %s", lambda: steer_prev)
+    logger.debug_lazy("Steering angles prev2: %s", lambda: steer_prev2)
+    logger.debug_lazy("Decimation: %s", lambda: env.cfg.decimation)
+    logger.debug_lazy("Sim dt: %s", lambda: env.cfg.sim.dt)
+    logger.debug_lazy("Control timestep dt: %s", lambda: dt)
+    logger.debug_lazy("Steering jerk: %s", lambda: j)
+    logger.debug_lazy("Smooth steering reward: %s", lambda: penalty)
+
+    # IMPORTANT: shift history ONCE per RL step (reward is called once per RL step)
+    drive.action_prev2 = drive.action_prev.clone()
+    drive.action_prev  = action_now.clone()
+
+    
+    return penalty
+    
