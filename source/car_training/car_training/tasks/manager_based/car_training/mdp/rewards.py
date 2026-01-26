@@ -119,7 +119,7 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
         # Now compute the reward for each simulation copy
         distance_reward = distance_from_center_reward(car_center, track_points_list, weight=3.0)
         # print(f"Distance reward: {distance_reward}")
-        velocity_reward_value = velocity_reward(car_speed, max_speed, weight=1.5)
+        velocity_reward_value = velocity_reward(car_speed, max_speed, weight=2)
         alive_reward = remains_alive_reward(weight=0.2)
         track_penalty = leaves_track_penalty(car_center, track_points_list, weight=0.5)
 
@@ -129,7 +129,7 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
         logger.debug(f"Simulation {i}: Distance Reward: {distance_reward}, Velocity Reward: {velocity_reward_value}, Alive Reward: {alive_reward}, Track Penalty: {track_penalty}, Total Reward: {total_reward}")
 
     total_reward_no_smoothing = torch.from_numpy(rewards).to(device=env.device)
-    smooth_steering = steering_jerk_penalty(env, weight=0.0001)
+    smooth_steering = steering_jerk_penalty(env, weight=0.001)
     total_reward = total_reward_no_smoothing + smooth_steering
     logger.debug_lazy("Total reward with smooth steering: %s", lambda: total_reward)
 
@@ -180,7 +180,7 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.
     dt = env.cfg.sim.dt * env.cfg.decimation
     j = (steer_now - 2.0 * steer_prev + steer_prev2) / (dt * dt)
 
-    penalty = -weight * (j * j)
+    penalty = -weight * abs(j)
 
     logger.debug_lazy("Steering angles now: %s", lambda: steer_now)
     logger.debug_lazy("Steering angles prev: %s", lambda: steer_prev)
