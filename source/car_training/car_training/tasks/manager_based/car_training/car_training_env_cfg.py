@@ -170,7 +170,7 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
     robot: ArticulationCfg = LEATHERBACK_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
     # overhead camera
-    overhead_camera: OverheadCameraCfg = OverheadCameraCfg()
+    overhead_camera: OverheadCameraCfg | None = None
 
     # lights
     dome_light = AssetBaseCfg(
@@ -244,10 +244,7 @@ class RewardsCfg:
     total_reward = RewTerm(
         func=get_total_reward,
         params={
-            "camera_cfg": SceneEntityCfg("overhead_camera"),
             "robot_cfg": SceneEntityCfg("robot"),
-            "completed_laps": 0,  # TODO: Replace with actual completed laps
-            "total_laps": 3,      # TODO: Replace with actual total laps
             "max_speed": 2.75,    # TODO: Replace with actual max speed
         },
         weight=1.0,
@@ -305,7 +302,7 @@ class CarTrainingEnvCfg(ManagerBasedRLEnvCfg):
         # viewer settings
         self.viewer.eye = (0.0, 0.0, 40.0)
         # simulation settings
-        self.sim.dt = 0.01
+        self.sim.dt = 0.05
         self.sim.render_interval = self.decimation
         self.sim.gravity = (0.0, 0.0, -9.81)
         # assign tracks to envs

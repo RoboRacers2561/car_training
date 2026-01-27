@@ -45,7 +45,7 @@ def get_logger(env: ManagerBasedRLEnv) -> GpuSafeLogger:
     return _LOGGER
 
 
-def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_cfg: SceneEntityCfg, completed_laps: int, total_laps: int, max_speed: float) -> torch.Tensor:
+def get_total_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg, max_speed: float) -> torch.Tensor:
     """
     Calculate the total reward based on multiple factors.
 
@@ -63,7 +63,7 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
 
     logger.debug("Calculating total reward...")
 
-    # camera: Articulation = env.scene[camera_cfg.name]
+    # camera: Articulation = env.scene["overhead_camera"]
 
     # rgb = camera.data.output['rgb']
 

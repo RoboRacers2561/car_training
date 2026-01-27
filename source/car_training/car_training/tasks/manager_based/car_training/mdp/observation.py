@@ -95,8 +95,7 @@ def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, do_convert_coor
     logger.debug_lazy("Car world positions: %s", lambda: relative_pos)
 
     track_size = env.cfg.scene.ground_plane.ground_plane_params.each_track_size
-    camera_width = env.cfg.scene.overhead_camera.camera_params.image.width
-    camera_height = env.cfg.scene.overhead_camera.camera_params.image.height
+    camera_width, camera_height = env.unwrapped.get_camera_dimensions()
     logger.debug(f"Track size: {track_size}, Camera width: {camera_width}, Camera height: {camera_height}")
 
     if do_convert_coords:

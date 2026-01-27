@@ -88,7 +88,7 @@ def main():
     )
     log_level = logging.DEBUG if args_cli.debug else logging.INFO
     # create environment
-    env = gym.make(args_cli.task, cfg=env_cfg, task_name=args_cli.task, console_level=log_level, file_level=log_level)
+    env = gym.make(args_cli.task, cfg=env_cfg, task_name=args_cli.task, console_level=log_level, file_level=log_level, enable_cameras=args_cli.enable_cameras)
 
     # print info (this is vectorized environment)
     print(f"[INFO]: Gym observation space: {env.observation_space}")
