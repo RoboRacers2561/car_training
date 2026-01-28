@@ -129,7 +129,7 @@ def get_total_reward(env: ManagerBasedRLEnv, camera_cfg: SceneEntityCfg, robot_c
         logger.debug(f"Simulation {i}: Distance Reward: {distance_reward}, Velocity Reward: {velocity_reward_value}, Alive Reward: {alive_reward}, Track Penalty: {track_penalty}, Total Reward: {total_reward}")
 
     total_reward_no_smoothing = torch.from_numpy(rewards).to(device=env.device)
-    smooth_steering = steering_jerk_penalty(env, weight=0.001)
+    smooth_steering = steering_jerk_penalty(env, weight=0.0)
     total_reward = total_reward_no_smoothing + smooth_steering
     logger.debug_lazy("Total reward with smooth steering: %s", lambda: total_reward)
 

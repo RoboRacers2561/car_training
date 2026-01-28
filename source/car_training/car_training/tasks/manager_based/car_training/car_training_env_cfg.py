@@ -38,6 +38,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parents[6].resolve()
 leatherback_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/robot_assets/leatherback_simple_better.usd")
+ttr_nano_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/robot_assets/ttr_nano_v1.usd")
 
 # Track USD paths
 track_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/scene_assets/")
@@ -92,6 +93,9 @@ LEATHERBACK_CFG = ArticulationCfg(
     
 )
 
+TTR_NANO_CFG = ArticulationCfg(
+
+)
 
 ##
 # Scene definition
