@@ -29,6 +29,7 @@ from car_training.tasks.manager_based.car_training.mdp.observation import  (
 from car_training.tasks.manager_based.car_training.mdp.termination import off_track_termination
 from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSteerAckermannAction
 from car_training.tasks.manager_based.car_training.configs.leatherback_params import LeatherbackParamsCfg
+from car_training.tasks.manager_based.car_training.configs.ttr_params import TTRNanoParamsCfg
 from car_training.tasks.manager_based.car_training.configs.plane_track_params import GroundPlaceCfg, TrackParamsCfg
 from car_training.tasks.manager_based.car_training.configs.overhead_camera_params import OverheadCameraParamsCfg
 from car_training.tasks.manager_based.car_training.mdp.events import reset_robot_root_random
@@ -93,10 +94,48 @@ LEATHERBACK_CFG = ArticulationCfg(
     
 )
 
+ttr_nano_params = TTRNanoParamsCfg()
+
 TTR_NANO_CFG = ArticulationCfg(
+    spawn=sim_utils.UsdFileCfg(usd_path=ttr_nano_path,                       
+        rigid_props=sim_utils.RigidBodyPropertiesCfg(
+            rigid_body_enabled=ttr_nano_params.rigid_props.rigid_body_enabled,
+            max_linear_velocity=ttr_nano_params.rigid_props.max_linear_velocity,
+            max_angular_velocity=ttr_nano_params.rigid_props.max_angular_velocity,
+            max_depenetration_velocity=ttr_nano_params.rigid_props.max_depenetration_velocity,
+            enable_gyroscopic_forces=ttr_nano_params.rigid_props.enable_gyroscopic_forces,
+        ),
+        articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+            enabled_self_collisions=ttr_nano_params.articulation_props.enabled_self_collisions,
+            solver_position_iteration_count=ttr_nano_params.articulation_props.solver_position_iteration_count,
+            solver_velocity_iteration_count=ttr_nano_params.articulation_props.solver_velocity_iteration_count,
+            sleep_threshold=ttr_nano_params.articulation_props.sleep_threshold,
+            stabilization_threshold=ttr_nano_params.articulation_props.stabilization_threshold,
+        ),),
 
+    init_state= ArticulationCfg.InitialStateCfg(
+        pos=ttr_nano_params.init_state.pos,
+        rot=ttr_nano_params.init_state.rot,
+        joint_pos=ttr_nano_params.init_state.joint_pos,
+    ),
+    actuators={
+        "throttle": ImplicitActuatorCfg(
+            joint_names_expr=ttr_nano_params.actuators.throttle_joint_names_expr,
+            effort_limit=ttr_nano_params.actuators.throttle_effort_limit,
+            velocity_limit=ttr_nano_params.actuators.throttle_velocity_limit,
+            stiffness=ttr_nano_params.actuators.throttle_stiffness,
+            damping=ttr_nano_params.actuators.throttle_damping,
+        ),
+        "steering": ImplicitActuatorCfg(
+            joint_names_expr=ttr_nano_params.actuators.steering_joint_names_expr,
+            effort_limit=ttr_nano_params.actuators.steering_effort_limit,
+            velocity_limit=ttr_nano_params.actuators.steering_velocity_limit,
+            stiffness=ttr_nano_params.actuators.steering_stiffness,
+            damping=ttr_nano_params.actuators.steering_damping,
+        ),
+    },
+    
 )
-
 ##
 # Scene definition
 ##
@@ -171,7 +210,7 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
     track: TrackCfg = TrackCfg()
 
     # robot
-    robot: ArticulationCfg = LEATHERBACK_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    robot: ArticulationCfg = TTR_NANO_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
     # overhead camera
     overhead_camera: OverheadCameraCfg = OverheadCameraCfg()

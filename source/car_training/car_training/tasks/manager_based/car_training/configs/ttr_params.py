@@ -25,12 +25,12 @@ class TTRNanoInitStateCfg:
 
     # Put your joint defaults here too
     joint_pos: dict[str, float] = {
-        "knuckle_l": 0.0,
-        "knuckle_r": 0.0,
-        "wheel_rl": 0.0,
-        "wheel_rr": 0.0,
-        "wheel_fl": 0.0,
-        "wheel_fr": 0.0,
+        "turn_L": 0.0,
+        "turn_R": 0.0,
+        "move_BL": 0.0,
+        "move_BR": 0.0,
+        "move_FL": 0.0,
+        "move_FR": 0.0,
     }
 
 
@@ -41,14 +41,14 @@ class TTRNanoActuatorParamsCfg:
     throttle_velocity_limit: float = 100.0
     throttle_stiffness: float = 0.0
     throttle_damping: float = 100000.0
-    throttle_joint_names_expr: list[str] = ["Wheel.*"] # I am giving to to all to the front wheels too so that wobbling is reduced
+    throttle_joint_names_expr: list[str] = ["move_.*"] # I am giving to all to the front wheels too so that wobbling is reduced
 
     # steering
     steering_effort_limit: float = 40000.0
     steering_velocity_limit: float = 100.0
     steering_stiffness: float = 1000.0
     steering_damping: float = 0.0
-    steering_joint_names_expr: list[str] = ["Knuckle__Upright__Front.*"]
+    steering_joint_names_expr: list[str] = ["turn_.*"]
 
 
 # The config class below aggregates all the tunable parameters for easy access
