@@ -222,19 +222,19 @@ class EventCfg:
     """Configuration for events."""
 
     # reset
-    # reset_robot_position = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
+    reset_robot_position = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
-    reset_robot_position = EventTerm(
-        func=reset_robot_root_random,
-        mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("robot"),
-            "z": 0.05,
-            "yaw_noise_std": 0.0, # radians, e.g. 0.2 ~= 11.5 degrees
-            "lookahead": 5,       # how many points ahead to compute tangent
-            "xy_rand_radius": 0.5
-        },
-    )
+    # reset_robot_position = EventTerm(
+    #     func=reset_robot_root_random,
+    #     mode="reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot"),
+    #         "z": 0.05,
+    #         "yaw_noise_std": 0.0, # radians, e.g. 0.2 ~= 11.5 degrees
+    #         "lookahead": 5,       # how many points ahead to compute tangent
+    #         "xy_rand_radius": 0.5
+    #     },
+    # )
 
 @configclass
 class RewardsCfg:

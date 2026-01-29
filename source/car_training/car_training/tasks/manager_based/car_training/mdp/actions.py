@@ -180,6 +180,8 @@ class ThrottleSteerAckermannAction(ActionTerm):
         self.logger.debug_lazy("Rear wheel velocity targets: %s", lambda: rear_vel)
         self.logger.debug_lazy("Front steering position targets: %s", lambda: front_pos)
 
+        # self.record_actions_to_file(throttle, steer)
+
         # Apply
         self.robot.set_joint_velocity_target(rear_vel, joint_ids=self.rear_ids)
         self.robot.set_joint_position_target(front_pos, joint_ids=self.front_ids)

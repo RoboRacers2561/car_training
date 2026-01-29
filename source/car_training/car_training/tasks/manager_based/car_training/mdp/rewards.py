@@ -12,14 +12,13 @@ from isaaclab.assets import Articulation
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils.math import wrap_to_pi
 from isaaclab.assets import RigidObject
-import torchaudio.functional as F
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
-
 import numpy as np
 import cv2
 import logging
+import torch.nn.functional as F
 
 from car_training.tasks.manager_based.car_training.mdp.utils.helpers import *
 from car_training.tasks.manager_based.car_training.mdp.observation import (
@@ -148,12 +147,11 @@ def get_total_reward(
 
         rewards[i] = total_reward
         logger.debug(
-            f"Simulation {i}: Distance Reward: {distance_reward}, Velocity Reward: {velocity_reward_value}, Alive Reward: {
-                alive_reward}, Track Penalty: {track_penalty}, Total Reward: {total_reward}"
+            f"Simulation {i}: Distance Reward: {distance_reward}, Velocity Reward: {velocity_reward_value}, Alive Reward: {alive_reward}, Track Penalty: {track_penalty}, Total Reward: {total_reward}"
         )
 
     total_reward_no_smoothing = torch.from_numpy(rewards).to(device=env.device)
-    smooth_steering = steering_jerk_penalty(env, weight=0.0001)
+    smooth_steering = steering_jerk_penalty(env, weight=0.003)
     total_reward = total_reward_no_smoothing + smooth_steering
     logger.debug_lazy("Total reward with smooth steering: %s",
                       lambda: total_reward)
@@ -187,30 +185,30 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.
         result = F.conv1d(buffer_input, kernel, padding=0)  # (num_envs, 1, buffer_size-2)
         return result.squeeze(1)  # (num_envs, buffer_size-2) 
 
-    action_now = drive.action_curr
-    if torch.isnan(action_now).any():
-        raise ValueError(
-            "Current action contains NaN in steering_jerk_penalty.")
+    # action_now = drive.action_curr
+    # if torch.isnan(action_now).any():
+    #     raise ValueError(
+    #         "Current action contains NaN in steering_jerk_penalty.")
 
     # Initialize history on first call
-    if torch.isnan(drive.action_prev).all() and torch.isnan(drive.action_prev2).all():
-        logger.debug("Initializing action history for steering jerk penalty.")
-        drive.action_prev = action_now.clone()
-        drive.action_prev2 = action_now.clone()
-        return torch.zeros((env.num_envs,), device=env.device)
-    elif torch.isnan(drive.action_prev).any() or torch.isnan(drive.action_prev2).any():
-        # Not all NaN, but some NaN values exist which is because of reset of some envs
-        logger.debug(
-            "Partial NaN detected in action history; initializing missing values for steering jerk penalty."
-        )
-        nan_prev = torch.isnan(drive.action_prev).any(dim=1)
-        nan_prev2 = torch.isnan(drive.action_prev2).any(dim=1)
-        drive.action_prev[nan_prev] = action_now[nan_prev].clone()
-        drive.action_prev2[nan_prev2] = action_now[nan_prev2].clone()
+    # if torch.isnan(drive.action_prev).all() and torch.isnan(drive.action_prev2).all():
+    #     logger.debug("Initializing action history for steering jerk penalty.")
+    #     drive.action_prev = action_now.clone()
+    #     drive.action_prev2 = action_now.clone()
+    #     return torch.zeros((env.num_envs,), device=env.device)
+    # elif torch.isnan(drive.action_prev).any() or torch.isnan(drive.action_prev2).any():
+    #     # Not all NaN, but some NaN values exist which is because of reset of some envs
+    #     logger.debug(
+    #         "Partial NaN detected in action history; initializing missing values for steering jerk penalty."
+    #     )
+    #     nan_prev = torch.isnan(drive.action_prev).any(dim=1)
+    #     nan_prev2 = torch.isnan(drive.action_prev2).any(dim=1)
+    #     drive.action_prev[nan_prev] = action_now[nan_prev].clone()
+    #     drive.action_prev2[nan_prev2] = action_now[nan_prev2].clone()
 
-    steer_now = action_now[:, 1]
-    steer_prev = drive.action_prev[:, 1]
-    steer_prev2 = drive.action_prev2[:, 1]
+    # steer_now = action_now[:, 1]
+    # steer_prev = drive.action_prev[:, 1]
+    # steer_prev2 = drive.action_prev2[:, 1]
     steer_buffer = drive.action_buffer[:, :, 1]
     
     min_buffer_size = 3
@@ -226,8 +224,7 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.
     #Updated j with filter 
     j = d2_filter(steer_buffer)/(dt*dt)
 
-    mask = torch.zeros_like(j, dtype=torch.bool) 
-    
+    mask = torch.zeros_like(j, dtype=torch.bool)
     for env_idx in range(env.num_envs):
         count = drive.buffer_count[env_idx].item()
         if count >= 3:
@@ -238,11 +235,11 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.
     num_valid = mask.sum(dim=1).float().clamp(min=1.0)
     j_rms = torch.sqrt(j_sqr_mask.sum(dim=1) / num_valid)
 
-    penalty = -weight * (j_rms * j_rms)
+    penalty = -weight * (j_rms)
 
-    logger.debug_lazy("Steering angles now: %s", lambda: steer_now)
-    logger.debug_lazy("Steering angles prev: %s", lambda: steer_prev)
-    logger.debug_lazy("Steering angles prev2: %s", lambda: steer_prev2)
+    # logger.debug_lazy("Steering angles now: %s", lambda: steer_now)
+    # logger.debug_lazy("Steering angles prev: %s", lambda: steer_prev)
+    # logger.debug_lazy("Steering angles prev2: %s", lambda: steer_prev2)
     logger.debug_lazy("Steering angles prev2: %s", lambda: steer_buffer)
     logger.debug_lazy("Decimation: %s", lambda: env.cfg.decimation)
     logger.debug_lazy("Sim dt: %s", lambda: env.cfg.sim.dt)
@@ -251,7 +248,7 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.
     logger.debug_lazy("Smooth steering reward: %s", lambda: penalty)
 
     # IMPORTANT: shift history ONCE per RL step (reward is called once per RL step)
-    drive.action_prev2 = drive.action_prev.clone()
-    drive.action_prev = action_now.clone()
+    # drive.action_prev2 = drive.action_prev.clone()
+    # drive.action_prev = action_now.clone()
 
     return penalty
