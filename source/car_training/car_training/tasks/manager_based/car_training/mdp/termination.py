@@ -71,6 +71,7 @@ def collision_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> 
     logger = get_logger(env)
 
     # Placeholder implementation
+    # TODO: Implement actual collision detection logic with the helper
     collision_flags = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
 
     logger.debug_lazy("Collision flags: %s", lambda: collision_flags)

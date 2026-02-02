@@ -393,27 +393,47 @@ def rotate_torch_image(image: torch.Tensor, angle_degrees: torch.Tensor) -> torc
     return torch.stack(rotated_images, dim=0)
 
 
-def distance_from_other_agents_penalty(image, weight: float = 1.0) -> float:
+def distance_from_other_agents(image, weight: float = 1.0) -> float:
     """
-    Placeholder function for distance from other agent penalty.
+    Function for distances from other agents.
 
     :param weight: Weight for the penalty.
     :type weight: float
 
-    :return: Penalty value.
+    :return: list of distances from other agents
     :rtype: float
     """
     # TODO: test
-    penalty = 0.0
+    distances = []
     car_centers_in_frame = get_all_car_centers(image)
     for i in car_centers_in_frame:
         for j in car_centers_in_frame:
             if i != j:
                 distance = np.linalg.norm(np.array(i) - np.array(j))
-                if distance < 10.0:  # threshold distance
-                    penalty += (10.0 - distance) / 10.0  # normalized penalty
+                distances.append(distance)
+    return distances
 
-    return penalty * weight
+
+def distance_from_other_agents_reward(image, min_distance: float = 10.0, weight: float = 1.0) -> float:
+    """
+    Reward function for distances from other agents.
+
+    :param min_distance: Minimum distance to consider for penalty.
+    :type min_distance: float
+    :param weight: Weight for the penalty.
+    :type weight: float
+
+    :return: Penalty based on distances from other agents.
+    :rtype: float
+    """
+    #TODO: min distance needs configuration
+    distances = distance_from_other_agents(image, weight=weight)
+    penalty = 0.0
+    for distance in distances:
+        if distance < min_distance:
+            penalty += (min_distance - distance) / min_distance * weight
+    return penalty
+
 
 if __name__ == "__main__":
     # test_image = cv2.imread("debug_image_testing.png")
