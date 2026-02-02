@@ -246,15 +246,3 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.
 
     return penalty
 
-def distance_from_other_agent_penalty(env: ManagerBasedRLEnv, weight: float = 1.0) -> torch.Tensor:
-    """
-    Penalize the agent for being too close to other agents. 
-
-    :return: Distance from other agents penalty.
-    :rtype: float
-    """
-    # Placeholder implementation
-    logger = get_logger(env)
-    logger.debug("Calculating distance from other agents penalty...")
-    distance_penalty = torch.zeros(env.num_envs, device=env.device)
-    return distance_penalty
