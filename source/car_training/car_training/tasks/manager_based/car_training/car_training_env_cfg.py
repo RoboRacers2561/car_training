@@ -215,6 +215,9 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
     # overhead camera
     overhead_camera: OverheadCameraCfg | None = None
 
+    # obstacle
+    obstacle_car: ArticulationCfg = LEATHERBACK_CFG.replace(prim_path="{ENV_REGEX_NS}/ObstacleCar")  # another car as obstacle
+
     # lights
     dome_light = AssetBaseCfg(
         prim_path="/World/DomeLight",
