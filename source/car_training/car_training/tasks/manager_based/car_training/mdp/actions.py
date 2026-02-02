@@ -20,6 +20,11 @@ REAR_WHEEL_NAMES = ["Wheel__Upright__Rear_Right", "Wheel__Upright__Rear_Left"]
 FRONT_WHEEL_NAMES = ["Wheel__Knuckle__Front_Right", "Wheel__Knuckle__Front_Left"]
 FRONT_STEER_NAMES = ["Knuckle__Upright__Front_Right", "Knuckle__Upright__Front_Left"]
 
+TTR_NANO_REAR_WHEEL_NAMES = ["move_BL", "move_BR"]
+TTR_NANO_FRONT_WHEEL_NAMES = ["move_FL", "move_FR"]
+TTR_NANO_FRONT_STEER_NAMES = ["turn_L", "turn_R"]
+
+
 THROTTLE_SCALE = 20
 STEER_SCALE = 1.0
 MAX_STEER = 0.6  # rad
@@ -72,8 +77,8 @@ class ThrottleSteerAckermannAction(ActionTerm):
         self.robot = env.scene[cfg.asset_name]
 
         # cache joint indices
-        self.rear_ids, _ = self.robot.find_joints(REAR_WHEEL_NAMES)
-        self.front_ids, _ = self.robot.find_joints(FRONT_STEER_NAMES)
+        self.rear_ids, _ = self.robot.find_joints(TTR_NANO_REAR_WHEEL_NAMES)
+        self.front_ids, _ = self.robot.find_joints(TTR_NANO_FRONT_STEER_NAMES)
 
         # scaling / limits
         self.throttle_scale = THROTTLE_SCALE
