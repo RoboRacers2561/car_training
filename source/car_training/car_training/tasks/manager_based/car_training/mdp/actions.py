@@ -77,8 +77,8 @@ class ThrottleSteerAckermannAction(ActionTerm):
         self.robot = env.scene[cfg.asset_name]
 
         # cache joint indices
-        self.rear_ids, _ = self.robot.find_joints(TTR_NANO_REAR_WHEEL_NAMES)
-        self.front_ids, _ = self.robot.find_joints(TTR_NANO_FRONT_STEER_NAMES)
+        self.rear_ids, _ = self.robot.find_joints(REAR_WHEEL_NAMES)
+        self.front_ids, _ = self.robot.find_joints(FRONT_STEER_NAMES)
 
         # scaling / limits
         self.throttle_scale = THROTTLE_SCALE

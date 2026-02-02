@@ -210,7 +210,7 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
     track: TrackCfg = TrackCfg()
 
     # robot
-    robot: ArticulationCfg = TTR_NANO_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    robot: ArticulationCfg = LEATHERBACK_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
     # overhead camera
     overhead_camera: OverheadCameraCfg = OverheadCameraCfg()
@@ -348,7 +348,7 @@ class CarTrainingEnvCfg(ManagerBasedRLEnvCfg):
         # viewer settings
         self.viewer.eye = (0.0, 0.0, 40.0)
         # simulation settings
-        self.sim.dt = 0.01
+        self.sim.dt = 0.05
         self.sim.render_interval = self.decimation
         self.sim.gravity = (0.0, 0.0, -9.81)
         # assign tracks to envs
