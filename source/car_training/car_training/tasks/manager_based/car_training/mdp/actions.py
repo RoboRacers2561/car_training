@@ -97,6 +97,14 @@ class ThrottleSteerAckermannAction(ActionTerm):
         self._action_prev = torch.full((env.num_envs, self._action_dim), float('nan'), device=env.device) # previous action
         self._action_prev2 = torch.full((env.num_envs, self._action_dim), float('nan'), device=env.device) # action before previous
 
+        self.buffer_size = 20
+        self.action_buffer = torch.zeros(
+            (env.num_envs, self.buffer_size, self._action_dim),
+            device=env.device
+        )
+        self.buffer_count = torch.zeros(env.num_envs, dtype=torch.long, device=env.device)
+        
+
     @property
     def action_dim(self):
         return self._action_dim
@@ -154,7 +162,11 @@ class ThrottleSteerAckermannAction(ActionTerm):
         
         # store as (num_envs, 2) again, but now processed
         self._processed_actions = torch.stack([throttle, steer], dim=-1)
-    
+
+        self.action_buffer = torch.roll(self.action_buffer, shifts=-1, dims=1)
+        self.action_buffer[:, -1, :] = self._processed_actions
+        self.buffer_count = torch.clamp(self.buffer_count + 1, max=self.buffer_size)
+
     def apply_actions(self):
         # actions: (num_envs, 2) = [throttle, steer]
         self.logger.debug("In apply_actions()")
@@ -173,6 +185,8 @@ class ThrottleSteerAckermannAction(ActionTerm):
         self.logger.debug_lazy("Rear wheel velocity targets: %s", lambda: rear_vel)
         self.logger.debug_lazy("Front steering position targets: %s", lambda: front_pos)
 
+        # self.record_actions_to_file(throttle, steer)
+
         # Apply
         self.robot.set_joint_velocity_target(rear_vel, joint_ids=self.rear_ids)
         self.robot.set_joint_position_target(front_pos, joint_ids=self.front_ids)
@@ -189,6 +203,9 @@ class ThrottleSteerAckermannAction(ActionTerm):
         self._action_curr[env_ids] = torch.full((len(env_ids), self.action_dim), float('nan'), device=self._action_curr.device)
         self._action_prev[env_ids] = torch.full((len(env_ids), self.action_dim), float('nan'), device=self._action_prev.device)
         self._action_prev2[env_ids] = torch.full((len(env_ids), self.action_dim), float('nan'), device=self._action_prev2.device)  
+
+        self.action_buffer[env_ids] = 0.0
+        self.buffer_count[env_ids] = 0
         
     def reset(self, env_ids: list[int] | None) -> None:
         """
