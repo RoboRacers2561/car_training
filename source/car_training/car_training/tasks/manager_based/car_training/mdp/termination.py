@@ -57,3 +57,21 @@ def off_track_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> 
     off_track_flags = ~has_track_pixel
     logger.debug_lazy("Off track flags: %s", lambda: off_track_flags)
     return off_track_flags
+
+def collision_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """
+    Vectorized termination function that ends an episode if the car 'collides' (is too close) with another object.
+
+    Args:
+        env: The environment instance.
+        state: The current state of the environment.
+    Returns:
+        torch.Tensor: A tensor indicating which episodes should terminate.
+    """
+    logger = get_logger(env)
+
+    # Placeholder implementation
+    collision_flags = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+
+    logger.debug_lazy("Collision flags: %s", lambda: collision_flags)
+    return collision_flags
