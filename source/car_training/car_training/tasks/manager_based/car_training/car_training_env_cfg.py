@@ -348,7 +348,7 @@ class CarTrainingEnvCfg(ManagerBasedRLEnvCfg):
         # viewer settings
         self.viewer.eye = (0.0, 0.0, 40.0)
         # simulation settings
-        self.sim.dt = 0.05
+        self.sim.dt = 0.01
         self.sim.render_interval = self.decimation
         self.sim.gravity = (0.0, 0.0, -9.81)
         # assign tracks to envs
