@@ -204,7 +204,7 @@ def leaves_track_penalty(car_center: tuple[float, float], track_points_list: lis
 
 def get_green_car_mask(image, debug=False):
     """
-    Generate a mask for the green car in the image.
+    Generate a mask for the green car(s) in the image.
 
     :param image: Input image from the car's camera.
     :type image: np.ndarray
@@ -258,6 +258,36 @@ def get_green_car_center(image, debug=False):
             return (cX, cY)
     
     return (0,0)  # Car not found
+
+
+def get_all_car_centers(image, debug=False):
+    """
+    Detect all green cars in the image and return their center coordinates. This works for multiple agent environments.
+
+    :param image: Input image from the car's camera.
+    :type image: np.ndarray
+
+    :return: List of center coordinates of the green cars as (x, y) tuples.
+    :rtype: list[tuple[float, float]]
+    """
+    mask = get_green_car_mask(image, debug=debug)
+
+    # Find contours of the masked image
+    contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    car_centers = []
+    for contour in contours:
+        M = cv2.moments(contour)
+        if M["m00"] != 0:
+            cX = int(M["m10"] / M["m00"])
+            cY = int(M["m01"] / M["m00"])
+            car_centers.append((cX, cY))
+            if debug:
+                debug_image = image.copy()
+                cv2.circle(debug_image, (cX, cY), 5, (255, 0, 0), -1)
+                cv2.imwrite(f"{TEST_DATA_PATH}/debug_all_green_car_centers.png", debug_image)
+
+    return car_centers
 
 
 def convert_coords(
