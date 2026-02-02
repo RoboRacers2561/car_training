@@ -224,8 +224,8 @@ def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEnt
     # print(f"track neighborhood image shape: {gray_crops.shape}")
 
     #save debug image
-    # debug_img = gray_crops[0, 0].cpu().numpy() * 255
-    # cv2.imwrite("debug_track_neighborhood_image.png", debug_img)
+    debug_img = gray_crops[0, 0].cpu().numpy() * 255
+    cv2.imwrite("debug_track_neighborhood_image.png", debug_img)
 
     return gray_crops
 

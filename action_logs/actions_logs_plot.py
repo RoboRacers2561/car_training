@@ -19,6 +19,12 @@ def plot_action_logs(file_path="action_logs/throttle_steering_commands.csv", sav
 
     timestamps = list(range(1, len(throttle_commands) + 1))
 
+    # cosider only first 800 entries for clarity
+    timestamps = timestamps[:800]
+    throttle_commands = throttle_commands[:800]
+    steering_commands = steering_commands[:800]
+
+
     # Plotting
     plt.figure(figsize=(12, 6))
 
@@ -40,6 +46,25 @@ def plot_action_logs(file_path="action_logs/throttle_steering_commands.csv", sav
 
     plt.tight_layout()
     plt.savefig(save_path)
+    plt.close()
+
+    ## Plot command histograms
+    plt.figure(figsize=(12, 6))
+    plt.subplot(1, 2, 1)
+    plt.hist(throttle_commands, bins=30, color='blue', alpha=0.7)
+    plt.xlabel('Throttle (rad/s)')
+    plt.ylabel('Frequency')
+    plt.title('Histogram of Throttle Commands')
+    plt.grid()
+
+    plt.subplot(1, 2, 2)
+    plt.hist(steering_commands, bins=30, color='orange', alpha=0.7)
+    plt.xlabel('Steering Angle (radians)')
+    plt.ylabel('Frequency')
+    plt.title('Histogram of Steering Commands')
+    plt.grid()
+    plt.tight_layout()
+    plt.savefig("action_logs/action_commands_histogram.png")
     plt.close()
 
 if __name__ == "__main__":
