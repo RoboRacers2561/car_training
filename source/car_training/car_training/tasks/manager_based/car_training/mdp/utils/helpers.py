@@ -414,7 +414,7 @@ def distance_from_other_agents(image, weight: float = 1.0) -> float:
     return distances
 
 
-def distance_from_other_agents_reward(image, min_distance: float = 10.0, weight: float = 1.0) -> float:
+def distance_from_other_agents_penalty(image, min_distance: float = 5.0, weight: float = 1.0) -> float:
     """
     Reward function for distances from other agents.
 
