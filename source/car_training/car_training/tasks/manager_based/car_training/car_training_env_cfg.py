@@ -288,7 +288,7 @@ class RewardsCfg:
         func=get_total_reward,
         params={
             "robot_cfg": SceneEntityCfg("robot"),
-            "max_speed": 2.75,    # TODO: Replace with actual max speed
+            "max_speed": 1,    # TODO: Replace with actual max speed
         },
         weight=1.0,
     )

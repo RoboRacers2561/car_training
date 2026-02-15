@@ -193,9 +193,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     dump_pickle(os.path.join(log_dir, "params", "env.pkl"), env_cfg)
     dump_pickle(os.path.join(log_dir, "params", "agent.pkl"), agent_cfg)
 
-    agent_cfg["policy_kwargs"] = {
-        "features_extractor_class": CustomMultiInputExtractor,
-    }
+    if "policy_kwargs" not in agent_cfg:
+        agent_cfg["policy_kwargs"] = {}
+    agent_cfg["policy_kwargs"]["features_extractor_class"] = CustomMultiInputExtractor
 
     # post-process agent configuration
     agent_cfg = process_sb3_cfg(agent_cfg, args_cli.num_envs)
