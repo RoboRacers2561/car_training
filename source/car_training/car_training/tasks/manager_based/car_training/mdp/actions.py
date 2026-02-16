@@ -151,17 +151,22 @@ class ThrottleSteerAckermannAction(ActionTerm):
         """
         self._raw_actions = actions
 
+        # pass action through tanh to ensure it's in [-1, 1]
+        actions = actions.tanh()
+
         # Map throttle from [-1, 1] → [0, 1]
-        # throttle_norm = 0.5 * (actions[:, 0] + 1.0)
+        throttle_norm = 0.5 * (actions[:, 0] + 1.0)
         throttle = actions[:, 0] * self.throttle_scale
-        throttle = throttle.clamp(MIN_THROTTLE, MAX_THROTTLE)
+        throttle = MIN_THROTTLE + throttle_norm * (MAX_THROTTLE - MIN_THROTTLE)
         self.logger.debug_lazy("Processed throttle commands: %s", lambda: throttle)
 
-        steer = (actions[:, 1] * self.steer_scale).clamp(-self.max_steer, self.max_steer)
+        steer = MAX_STEER * actions[:, 1] * self.steer_scale
         self.logger.debug_lazy("Processed steer commands: %s", lambda: steer)
         
         # store as (num_envs, 2) again, but now processed
         self._processed_actions = torch.stack([throttle, steer], dim=-1)
+
+        # self.record_actions_to_file(throttle, steer)
 
         self.action_buffer = torch.roll(self.action_buffer, shifts=-1, dims=1)
         self.action_buffer[:, -1, :] = self._processed_actions
@@ -184,8 +189,6 @@ class ThrottleSteerAckermannAction(ActionTerm):
 
         self.logger.debug_lazy("Rear wheel velocity targets: %s", lambda: rear_vel)
         self.logger.debug_lazy("Front steering position targets: %s", lambda: front_pos)
-
-        # self.record_actions_to_file(throttle, steer)
 
         # Apply
         self.robot.set_joint_velocity_target(rear_vel, joint_ids=self.rear_ids)
