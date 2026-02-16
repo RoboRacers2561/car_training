@@ -210,7 +210,7 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
     track: TrackCfg = TrackCfg()
 
     # robot
-    robot: ArticulationCfg = LEATHERBACK_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    robot: ArticulationCfg = TTR_NANO_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
     # overhead camera
     overhead_camera: OverheadCameraCfg | None = None
