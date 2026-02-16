@@ -14,6 +14,8 @@ there will be significant overhead in GPU->CPU transfer.
 
 import argparse
 import sys
+import subprocess
+import socket
 
 from isaaclab.app import AppLauncher
 
@@ -161,6 +163,39 @@ class CustomMultiInputExtractor(BaseFeaturesExtractor):
         fused = torch.cat([img_features, vel_features], dim=1)
         return self.fc(fused)
     
+def _free_port():
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+    
+def start_tensorboard(log_dir, port=None):
+    port = port or _free_port()
+    print(f"[INFO] Starting TensorBoard on port {port} with log directory: {log_dir}")
+
+    p = subprocess.Popen(
+        [
+            sys.executable, "-m", "tensorboard",
+            "--logdir", log_dir,
+            "--port", str(port),
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.STDOUT,
+    )
+
+    print(f"TensorBoard running → http://localhost:{port}")
+    for _ in range(20):
+        line = p.stdout.readline()
+        if not line:
+            break
+        print(line.rstrip())
+        if "TensorBoard" in line and ("http://" in line or "http" in line):
+            break
+    return p, port
+
+    
+    
 
 @hydra_task_config(args_cli.task, "sb3_cfg_entry_point")
 def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: dict):
@@ -249,6 +284,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     new_logger = configure(log_dir, ["stdout", "tensorboard"])
     agent.set_logger(new_logger)
 
+    # start tensorboard
+    # process = start_tensorboard(log_dir)
     # callbacks for agent
     checkpoint_callback = CheckpointCallback(save_freq=1000, save_path=log_dir, name_prefix="model", verbose=2)
     # train the agent
