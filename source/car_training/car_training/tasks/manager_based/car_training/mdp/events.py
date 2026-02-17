@@ -220,3 +220,47 @@ def reset_robot_root_random(
 
     robot.write_root_pose_to_sim(torch.cat([pos, quat], dim=-1), env_ids=env_ids)
     robot.write_root_velocity_to_sim(torch.zeros((n, 6), device=device), env_ids=env_ids)
+
+def choose_rand_point(pts) -> list[float, float]:
+    """
+    Choose a random point from a list of points.
+
+    :param pts: A list of points, where each point is a tuple (x, y).
+    :type pts: list[tuple[float, float]]
+
+    :return: A randomly chosen point from the list.
+    :rtype: list[float, float]
+    """
+    if len(pts) == 0:
+        raise ValueError("No points available to choose from.")
+
+    
+    idx = torch.randint(0, len(pts), (1,)).item()
+    return pts[idx]
+
+def reset_destination_pos(env: ManagerBasedRLEnv, env_ids: torch.Tensor):
+    """
+    Reset the destination position for the specified environments to a random point on the track.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+    :param env_ids: The IDs of the environments to reset.
+    :type env_ids: torch.Tensor
+    """
+    logger = get_logger(env)
+
+    tp_frame = env.unwrapped.track_points  # in to coordinates of the frame
+    if len(tp_frame) == 0:
+        logger.warning("No track points available to reset destination position.")
+        return
+
+    for eid in env_ids.tolist():
+        pts = tp_frame[eid]
+        if len(pts) == 0:
+            logger.warning("No track points available for env %d to reset destination position.", eid)
+            continue
+        
+        random_point_on_track = choose_rand_point(pts)
+        env.destination_pos[eid] = torch.tensor(random_point_on_track, device=env.device)
+
+    

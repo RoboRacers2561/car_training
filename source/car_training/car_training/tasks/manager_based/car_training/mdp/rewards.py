@@ -245,3 +245,66 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.
     # drive.action_prev = action_now.clone()
 
     return penalty
+
+
+def reset_agent_distance_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg) -> torch.Tensor:
+    """
+    Total reward for the reset agent, which can be different from the main agent's reward.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+    :param robot_cfg: Configuration for the robot.
+    :type robot_cfg: SceneEntityCfg
+
+    :return: Total reward for the reset agent.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+    logger.debug("Calculating reset agent total reward...")
+    cam_width, cam_height = env.unwrapped.get_camera_dimensions()
+
+    # max distance in the image is the diagonal
+    max_distance = np.sqrt(cam_width**2 + cam_height**2)
+
+    car_pos: torch.Tensor = env.unwrapped.current_observation[:, :2]  # (N, 2)
+    destination_pos: torch.Tensor = env.unwrapped.destination_pos  # (N, 2)
+
+    # Compute pairwise distances on GPU: (N, N)
+    distances = torch.cdist(car_pos, destination_pos, p=2)
+    # Distance from each car to its own destination (diagonal)
+    per_env_distance = distances.diagonal()
+    distance_reward =  1 - per_env_distance / max_distance  # Normalize and invert so that closer to destination is higher reward
+
+    logger.debug_lazy("Pairwise distances shape: %s", lambda: distances.shape)
+    logger.debug_lazy("Per-env distance to destination: %s", lambda: per_env_distance)
+    logger.debug_lazy("Reset agent reward: %s", lambda: distance_reward)
+
+    return distance_reward
+
+def get_terminal_bonus(env: ManagerBasedRLEnv, bonus: float) -> torch.Tensor:
+    """
+    Bonus reward given at the end of an episode, for example when the agent reaches the goal.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+    :param bonus: The bonus reward to give.
+    :type bonus: float
+
+    :return: Terminal bonus reward.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+    logger.debug("Calculating terminal bonus...")
+
+    # Check if episode is done for each env
+    reached_goal_flags = env.unwrapped.reached_goal_flags  # (N,)
+
+    # Give bonus to envs that are done
+    rewards = torch.where(reached_goal_flags, torch.tensor(bonus, device=env.device), torch.zeros_like(reached_goal_flags, dtype=torch.float))
+
+    logger.debug_lazy("Reached goal flags: %s", lambda: reached_goal_flags)
+    logger.debug_lazy("Terminal bonus rewards: %s", lambda: rewards)
+
+    return rewards
+
+

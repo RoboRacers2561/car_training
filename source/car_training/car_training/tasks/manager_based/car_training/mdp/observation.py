@@ -283,3 +283,48 @@ def front_wheels_angle(env: ManagerBasedRLEnv) -> torch.Tensor:
     logger.debug_lazy("Front left wheel angle: %s", lambda: front_left_angle)
 
     return front_right_angle, front_left_angle
+
+
+# Below are methods for reset agent training
+
+def get_reset_agent_observation(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """
+    Get the observation for the reset agent, which consists of the car's position and heading frame coordinates
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+    :param robot_asset_cfg: The configuration of the robot asset.
+    :type robot_asset_cfg: SceneEntityCfg
+
+    :return: A tensor containing the car's (x, y) position and heading angle.
+    :rtype: torch.Tensor
+    """
+    pos = robot_pos(env, asset_cfg, do_convert_coords=True)  # (N, 2)
+    heading = robot_heading(env, asset_cfg)  # (N, 2)
+
+    if not hasattr(env.unwrapped, 'destination_pos'):
+        destination = torch.zeros((env.unwrapped.num_envs, 2), device=pos.device)  # (N, 2)
+    else:
+        destination = env.unwrapped.destination_pos  # (N, 2)
+
+    observation = torch.cat((pos, heading, destination), dim=-1)  # (N, 6)
+
+    # for debugging, get the camera image
+    if hasattr(env.unwrapped, 'static_track_image') and env.unwrapped.static_track_image is not None:
+        for env_index in range(env.unwrapped.num_envs):
+
+            camera_img = env.unwrapped.static_track_image  # (N, H, W, 3)
+            first_env_img = camera_img[env_index].cpu().numpy()
+
+            # draw position and destination on the image for debugging
+            pos_coords = (int(pos[env_index, 0].item()), int(pos[env_index, 1].item()))
+            dest_coords = (int(destination[env_index, 0].item()), int(destination[env_index, 1].item()))
+            heading_vector = (int(heading[env_index, 0].item() * 10), int(heading[env_index, 1].item() * 10)) # scale for visibility
+            cv2.arrowedLine(first_env_img, pos_coords, (pos_coords[0] + heading_vector[0], pos_coords[1] + heading_vector[1]), color=(255, 0, 0), thickness=2) # blue for heading
+            
+            cv2.circle(first_env_img, pos_coords, radius=5, color=(0, 255, 0), thickness=2)  # green for position
+            cv2.circle(first_env_img, dest_coords, radius=5, color=(0, 0, 255), thickness=2)  # red for destination
+            cv2.imwrite("debug_reset_agent_observation.png", first_env_img)
+
+    env.unwrapped.current_observation = copy.deepcopy(observation)  # store the current observation in the env
+    return observation
