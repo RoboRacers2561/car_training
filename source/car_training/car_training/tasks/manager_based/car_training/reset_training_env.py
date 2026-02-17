@@ -4,6 +4,8 @@ import math
 from collections.abc import Sequence
 import torch
 from pathlib import Path
+import omni
+from pxr import UsdGeom, Gf
 
 PORJECT_ROOT = Path(__file__).resolve().parents[8]
 print(f"Project root: {PORJECT_ROOT}")
@@ -37,8 +39,10 @@ class CarResetEnv(ManagerBasedRLEnv):
         self.current_observation = None
 
         super().__init__(cfg, render_mode, **kwargs)
+        self.ensure_goal_markers(self.num_envs)
 
         self.destination_pos = torch.zeros((self.num_envs, 2), device=self.device) # this will be updated at each reset based on the track points
+        self.destination_pos_world = [] # this will be updated at each reset based on the track points, in world coordinates
         self._static_track_inited = False
         self.static_track_image = None # will be initialized on first reset
         self.track_points = [] # will be initialized on first reset
@@ -125,6 +129,41 @@ class CarResetEnv(ManagerBasedRLEnv):
                 # convert to world coordinates
                 world_points = convert_coords_list(track_points, track_dimensions, (camera_width, camera_height), image_to_isaaclab=True)
                 self.track_points_world.append(world_points)
+            
+            self.destination_pos_world = convert_coords_list(self.destination_pos.cpu().numpy(), track_dimensions, (camera_width, camera_height), image_to_isaaclab=True)
+            self.set_goal_markers(self.destination_pos_world)
+
+    def ensure_goal_markers(self, num_envs: int, radius: float = 0.2):
+        stage = omni.usd.get_context().get_stage()
+        for i in range(num_envs):
+            path = f"/World/envs/env_{i}/GoalMarker"
+            prim = stage.GetPrimAtPath(path)
+            if not prim or not prim.IsValid():
+                sphere = UsdGeom.Sphere.Define(stage, path)
+                sphere.GetRadiusAttr().Set(radius)
+                UsdGeom.Gprim(sphere.GetPrim()).CreateDisplayColorAttr().Set([(1.0, 0.0, 0.0)])  # red
+                # make sure it has a translate op
+                UsdGeom.Xformable(sphere.GetPrim()).AddTranslateOp()
+    
+    def set_goal_markers(self, goal_pos_w):  # shape: (num_envs, 2)
+        stage = omni.usd.get_context().get_stage()
+        num_envs = len(goal_pos_w)
+
+        for i in range(num_envs):
+            path = f"/World/envs/env_{i}/GoalMarker"
+            prim = stage.GetPrimAtPath(path)
+            if not prim or not prim.IsValid():
+                continue
+
+            xform = UsdGeom.Xformable(prim)
+            ops = xform.GetOrderedXformOps()
+            if not ops:
+                op = xform.AddTranslateOp()
+            else:
+                op = ops[0]  # first op is translate (if you created it that way)
+
+            p = goal_pos_w[i]
+            op.Set(Gf.Vec3d(float(p[0]), float(p[1]), 0.1))  # set z to 0.1 to avoid z-fighting with the ground
 
     def get_camera_dimensions(self) -> tuple[int, int]:
         """

@@ -310,21 +310,21 @@ def get_reset_agent_observation(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCf
     observation = torch.cat((pos, heading, destination), dim=-1)  # (N, 6)
 
     # for debugging, get the camera image
-    if hasattr(env.unwrapped, 'static_track_image') and env.unwrapped.static_track_image is not None:
-        for env_index in range(env.unwrapped.num_envs):
+    # if hasattr(env.unwrapped, 'static_track_image') and env.unwrapped.static_track_image is not None:
+    #     for env_index in range(env.unwrapped.num_envs):
 
-            camera_img = env.unwrapped.static_track_image  # (N, H, W, 3)
-            first_env_img = camera_img[env_index].cpu().numpy()
+    #         camera_img = env.unwrapped.static_track_image  # (N, H, W, 3)
+    #         first_env_img = camera_img[env_index].cpu().numpy()
 
-            # draw position and destination on the image for debugging
-            pos_coords = (int(pos[env_index, 0].item()), int(pos[env_index, 1].item()))
-            dest_coords = (int(destination[env_index, 0].item()), int(destination[env_index, 1].item()))
-            heading_vector = (int(heading[env_index, 0].item() * 10), int(heading[env_index, 1].item() * 10)) # scale for visibility
-            cv2.arrowedLine(first_env_img, pos_coords, (pos_coords[0] + heading_vector[0], pos_coords[1] + heading_vector[1]), color=(255, 0, 0), thickness=2) # blue for heading
+    #         # draw position and destination on the image for debugging
+    #         pos_coords = (int(pos[env_index, 0].item()), int(pos[env_index, 1].item()))
+    #         dest_coords = (int(destination[env_index, 0].item()), int(destination[env_index, 1].item()))
+    #         heading_vector = (int(heading[env_index, 0].item() * 10), int(heading[env_index, 1].item() * 10)) # scale for visibility
+    #         cv2.arrowedLine(first_env_img, pos_coords, (pos_coords[0] + heading_vector[0], pos_coords[1] + heading_vector[1]), color=(255, 0, 0), thickness=2) # blue for heading
             
-            cv2.circle(first_env_img, pos_coords, radius=5, color=(0, 255, 0), thickness=2)  # green for position
-            cv2.circle(first_env_img, dest_coords, radius=5, color=(0, 0, 255), thickness=2)  # red for destination
-            cv2.imwrite("debug_reset_agent_observation.png", first_env_img)
+    #         cv2.circle(first_env_img, pos_coords, radius=5, color=(0, 255, 0), thickness=2)  # green for position
+    #         cv2.circle(first_env_img, dest_coords, radius=5, color=(0, 0, 255), thickness=2)  # red for destination
+    #         cv2.imwrite("debug_reset_agent_observation.png", first_env_img)
 
     env.unwrapped.current_observation = copy.deepcopy(observation)  # store the current observation in the env
     return observation
