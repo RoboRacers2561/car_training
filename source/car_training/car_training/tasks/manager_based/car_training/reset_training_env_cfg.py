@@ -20,9 +20,9 @@ from isaaclab.sensors import TiledCameraCfg
 from isaaclab.actuators import ImplicitActuatorCfg
 
 from . import mdp
-from car_training.tasks.manager_based.car_training.mdp.rewards import reset_agent_distance_reward, get_terminal_bonus
+from car_training.tasks.manager_based.car_training.mdp.rewards import reset_agent_distance_reward, get_terminal_bonus, heading_alignment_reward
 from car_training.tasks.manager_based.car_training.mdp.observation import get_reset_agent_observation
-from car_training.tasks.manager_based.car_training.mdp.termination import reached_goal_termination
+from car_training.tasks.manager_based.car_training.mdp.termination import out_of_view_termination
 from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSteerAckermannAction
 from car_training.tasks.manager_based.car_training.configs.leatherback_params import LeatherbackParamsCfg
 from car_training.tasks.manager_based.car_training.configs.ttr_params import TTRNanoParamsCfg
@@ -257,7 +257,7 @@ class EventCfg:
 
     # reset
     reset_robot_position = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
-    reset_destination = EventTerm(func=reset_destination_pos, mode="reset")
+    # reset_destination = EventTerm(func=reset_destination_pos, mode="reset")
 
 @configclass
 class RewardsCfg:
@@ -278,14 +278,26 @@ class RewardsCfg:
         weight=1.0,
     )
 
+    heading_alignment_rew = RewTerm(
+        func=heading_alignment_reward,
+        weight=0.8,
+    )
+
+    
+
 
 @configclass
 class TerminationsCfg:
     """Termination terms for the MDP."""
 
     # Reached goal termination
-    reached_goal_term = DoneTerm(func=reached_goal_termination, 
+    # reached_goal_term = DoneTerm(func=reached_goal_termination, 
+    #                          params={"asset_cfg": SceneEntityCfg("robot"),},)
+    
+    out_of_view_term = DoneTerm(func=out_of_view_termination,
                              params={"asset_cfg": SceneEntityCfg("robot"),},)
+    
+    time_out_term = DoneTerm(func=mdp.time_out)
 
 
 
@@ -326,11 +338,10 @@ class CarTrainingEnvCfg(ManagerBasedRLEnvCfg):
         """Post initialization."""
         # general settings
         self.decimation = 2 # How many physics substeps the same action is applied for
-        self.episode_length_s = 2
+        self.episode_length_s = 30
         # viewer settings
         self.viewer.eye = (0.0, 0.0, 40.0)
         # simulation settings
         self.sim.dt = 0.05
         self.sim.render_interval = self.decimation
         self.sim.gravity = (0.0, 0.0, -9.81)
-        # assign tracks to envs

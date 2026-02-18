@@ -263,13 +263,13 @@ def reset_destination_pos(env: ManagerBasedRLEnv, env_ids: torch.Tensor):
             continue
         
         random_point_on_track = choose_rand_point(pts)
-        env.destination_pos[eid] = torch.tensor(random_point_on_track, device=env.device)
+        env.unwrapped.destination_pos[eid] = torch.tensor(random_point_on_track, device=env.device)
     
     # convert destination_pos to world coordinates for setting goal markers
     camera_width, camera_height = env.get_camera_dimensions()
     track_dimensions: tuple = env.scene.cfg.ground_plane.ground_plane_params.each_track_size
-    env.destination_pos_world = convert_coords_list(env.destination_pos.cpu().numpy(), track_dimensions, (camera_width, camera_height), image_to_isaaclab=True)
-    env.set_goal_markers(env.destination_pos_world)
+    env.unwrapped.destination_pos_world = convert_coords_list(env.destination_pos.cpu().numpy(), track_dimensions, (camera_width, camera_height), image_to_isaaclab=True)
+    env.unwrapped.set_goal_markers(env.destination_pos_world)
 
 
     

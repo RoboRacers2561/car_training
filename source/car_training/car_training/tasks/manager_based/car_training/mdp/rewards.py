@@ -29,6 +29,7 @@ from car_training.tasks.manager_based.car_training.mdp.observation import (
 from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import (
     GpuSafeLogger,
 )
+from car_training.tasks.manager_based.car_training.mdp.events import reset_destination_pos
 
 _LOGGER: Optional[GpuSafeLogger] = None
 
@@ -246,6 +247,7 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.
 
     return penalty
 
+############ FOR RESET AGENT ############
 
 def reset_agent_distance_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg) -> torch.Tensor:
     """
@@ -296,8 +298,21 @@ def get_terminal_bonus(env: ManagerBasedRLEnv, bonus: float) -> torch.Tensor:
     logger = get_logger(env)
     logger.debug("Calculating terminal bonus...")
 
-    # Check if episode is done for each env
-    reached_goal_flags = env.unwrapped.reached_goal_flags  # (N,)
+    # get robot position and destination position and check if they are close enough
+    robot_pos = env.unwrapped.current_observation[:, :2]  # (N, 2), we only care about x and y
+    destination_pos = env.destination_pos  # (N, 2)
+    
+    # Check if agent reached the goal (within threshold distance)
+    distance_to_goal = torch.norm(robot_pos - destination_pos, dim=1)  # (N,)
+    goal_threshold = env.unwrapped.goal_distance_threshold
+    reached_goal_flags = distance_to_goal < goal_threshold
+
+    env_ids_reached_goal = torch.where(reached_goal_flags)[0]
+    logger.debug_lazy("Environments that reached the goal: %s", lambda: env_ids_reached_goal)
+
+    reset_destination_pos(env, env_ids_reached_goal) # reset the destination for the envs that reached the goal so that they can continue training towards the next destination in the same episode
+
+    env.unwrapped.reached_goal_flags = reached_goal_flags # store this in the env for use in rewards and logging
 
     # Give bonus to envs that are done
     rewards = torch.where(reached_goal_flags, torch.tensor(bonus, device=env.device), torch.zeros_like(reached_goal_flags, dtype=torch.float))
@@ -306,5 +321,31 @@ def get_terminal_bonus(env: ManagerBasedRLEnv, bonus: float) -> torch.Tensor:
     logger.debug_lazy("Terminal bonus rewards: %s", lambda: rewards)
 
     return rewards
+
+
+def heading_alignment_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """
+    Reward for aligning the car's heading with the direction to the goal.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+
+    :return: Heading alignment reward.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+    logger.debug("Calculating heading alignment reward...")
+
+    current_observation = env.unwrapped.current_observation
+
+    angle_between_heading_goal = current_observation[:, -1]  # (N,) range [0 , pi]
+
+    # compute reward based on this direction angle
+    # reward is 1 when angle is 0 (perfect alignment), 0 when angle is pi (opposite direction)
+    reward = 1 - angle_between_heading_goal / torch.pi  # (N,)
+
+    logger.debug_lazy("Heading alignment rewards: %s", lambda: reward)
+
+    return reward
 
 

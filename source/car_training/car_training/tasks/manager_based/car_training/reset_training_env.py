@@ -134,6 +134,14 @@ class CarResetEnv(ManagerBasedRLEnv):
             self.set_goal_markers(self.destination_pos_world)
 
     def ensure_goal_markers(self, num_envs: int, radius: float = 0.2):
+        """
+        Creates a visual marker in the simulator for the goal position of each environment. This is only useful for debugging and visualization purposes.
+        
+        :param num_envs: The number of environments to create goal markers for.
+        :type num_envs: int
+        :param radius: The radius of the goal marker spheres.
+        :type radius: float
+        """
         stage = omni.usd.get_context().get_stage()
         for i in range(num_envs):
             path = f"/World/envs/env_{i}/GoalMarker"
@@ -146,6 +154,12 @@ class CarResetEnv(ManagerBasedRLEnv):
                 UsdGeom.Xformable(sphere.GetPrim()).AddTranslateOp()
     
     def set_goal_markers(self, goal_pos_w):  # shape: (num_envs, 2)
+        """
+        Sets the position of the goal markers in the simulator based on the provided world coordinates. For visualization purposes only.
+        
+        :param goal_pos_w: A list of (x, y) tuples representing the goal positions in world coordinates for each environment.
+        :type goal_pos_w: list[tuple[float, float]]
+        """
         stage = omni.usd.get_context().get_stage()
         num_envs = len(goal_pos_w)
 
