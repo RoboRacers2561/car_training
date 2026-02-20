@@ -52,7 +52,7 @@ class CarResetEnv(ManagerBasedRLEnv):
         self.action_driver: ThrottleSteerAckermannAction = self.action_manager._terms["drive"] # this is a ThrottleSteerAckermannAction
         self.goal_distance_threshold = 20 # threshold is number of pixels
         self.reached_goal_flags = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device) # to keep track of which envs have reached the goal
-
+        self.previous_distance_to_goal = None # to keep track of the previous distance to goal for reward calculation
 
     def reset(self, seed = None, env_ids = None, options = None) -> tuple[dict[str, torch.Tensor], dict]:
         """
@@ -190,6 +190,7 @@ class CarResetEnv(ManagerBasedRLEnv):
             camera_cfg = self.scene.cfg.overhead_camera
             return camera_cfg.width, camera_cfg.height
         else:
-            return self.static_track_image.shape[2], self.static_track_image.shape[1]
+            # return self.static_track_image.shape[2], self.static_track_image.shape[1]
+            return 512, 384
 
 

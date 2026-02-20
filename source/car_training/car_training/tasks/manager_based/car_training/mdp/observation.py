@@ -319,37 +319,50 @@ def get_reset_agent_observation(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCf
     observation = torch.cat((pos, heading, velocity, destination, distance_to_goal, direction_to_goal, angle_between_heading_and_goal.unsqueeze(-1)), dim=-1)  # (N, 2 + 2 + 2 + 1 + 2 + 1) = (N, 10)
 
     logger.debug_lazy("Reset agent observation: %s", lambda: observation)
+
+    # try:
+    #     print(f"episode reward sum: ", env.reward_manager._episode_sums)
+    # except Exception as e:
+    #     pass
     
     # # for debugging, get the camera image
-    if hasattr(env.unwrapped, 'static_track_image') and env.unwrapped.static_track_image is not None:
-        for env_index in range(env.unwrapped.num_envs):
+    # if hasattr(env.unwrapped, 'static_track_image') and env.unwrapped.static_track_image is not None:
+    #     for env_index in range(env.unwrapped.num_envs):
 
-            camera_img = env.unwrapped.static_track_image  # (N, H, W, 3)
-            first_env_img = camera_img[env_index].cpu().numpy()
+    #         camera_img = env.unwrapped.static_track_image  # (N, H, W, 3)
+    #         first_env_img = camera_img[env_index].cpu().numpy()
 
-            # draw position and destination on the image for debugging
-            pos_coords = (int(pos[env_index, 0].item()), int(pos[env_index, 1].item()))
-            dest_coords = (int(destination[env_index, 0].item()), int(destination[env_index, 1].item()))
-            heading_vector = (int(heading[env_index, 0].item() * 10), int(heading[env_index, 1].item() * 10)) # scale for visibility
-            cv2.arrowedLine(first_env_img, pos_coords, (pos_coords[0] + heading_vector[0], pos_coords[1] + heading_vector[1]), color=(255, 0, 0), thickness=2) # blue for heading
+    #         # draw position and destination on the image for debugging
+    #         pos_coords = (int(pos[env_index, 0].item()), int(pos[env_index, 1].item()))
+    #         dest_coords = (int(destination[env_index, 0].item()), int(destination[env_index, 1].item()))
+    #         heading_vector = (int(heading[env_index, 0].item() * 10), int(heading[env_index, 1].item() * 10)) # scale for visibility
+    #         cv2.arrowedLine(first_env_img, pos_coords, (pos_coords[0] + heading_vector[0], pos_coords[1] + heading_vector[1]), color=(255, 0, 0), thickness=2) # blue for heading
             
-            # draw position and destination on the image for debugging
-            cv2.circle(first_env_img, pos_coords, radius=5, color=(0, 255, 0), thickness=2)  # green for position
-            cv2.circle(first_env_img, dest_coords, radius=5, color=(0, 0, 255), thickness=2)  # red for destination
+    #         # draw position and destination on the image for debugging
+    #         cv2.circle(first_env_img, pos_coords, radius=5, color=(0, 255, 0), thickness=2)  # green for position
+    #         cv2.circle(first_env_img, dest_coords, radius=5, color=(0, 0, 255), thickness=2)  # red for destination
 
-            # draw direction to goal
-            direction_vector = (int(direction_to_goal[env_index, 0].item() * 10), int(direction_to_goal[env_index, 1].item() * 10))
-            cv2.arrowedLine(first_env_img, pos_coords, (pos_coords[0] + direction_vector[0], pos_coords[1] + direction_vector[1]), color=(255, 255, 0), thickness=2) # cyan for direction to goal
+    #         # draw direction to goal
+    #         direction_vector = (int(direction_to_goal[env_index, 0].item() * 10), int(direction_to_goal[env_index, 1].item() * 10))
+    #         cv2.arrowedLine(first_env_img, pos_coords, (pos_coords[0] + direction_vector[0], pos_coords[1] + direction_vector[1]), color=(255, 255, 0), thickness=2) # cyan for direction to goal
 
-            # write direction angle to goal on the image
-            cv2.putText(first_env_img, f"{angle_between_heading_and_goal[env_index].item():.2f}", (pos_coords[0] + 10, pos_coords[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+    #         # write direction angle to goal on the image
+    #         cv2.putText(first_env_img, f"{angle_between_heading_and_goal[env_index].item():.2f}", (pos_coords[0] + 10, pos_coords[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             
-            # write distance to goal on the image
-            cv2.putText(first_env_img, f"{distance_to_goal[env_index].item():.2f}", (pos_coords[0] + 10, pos_coords[1] + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+    #         # write distance to goal on the image
+    #         cv2.putText(first_env_img, f"{distance_to_goal[env_index].item():.2f}", (pos_coords[0] + 10, pos_coords[1] + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
-            cv2.imwrite("debug_reset_agent_observation.png", first_env_img)
+    #         cv2.imwrite("debug_reset_agent_observation.png", first_env_img)
 
-    env.unwrapped.current_observation = copy.deepcopy(observation)  # store the current observation in the env
+    env.unwrapped.current_observation = {
+        "pos": pos.clone(),
+        "heading": heading.clone(),
+        "velocity": velocity.clone(),
+        "destination": destination.clone(),
+        "distance_to_goal": distance_to_goal.clone(),
+        "direction_to_goal": direction_to_goal.clone(),
+        "angle_between_heading_and_goal": angle_between_heading_and_goal.clone(),
+    }
     return observation
 
 def angle_between(a: torch.Tensor, b: torch.Tensor):

@@ -249,7 +249,7 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.
 
 ############ FOR RESET AGENT ############
 
-def reset_agent_distance_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg) -> torch.Tensor:
+def reset_agent_distance_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     """
     Total reward for the reset agent, which can be different from the main agent's reward.
 
@@ -265,17 +265,35 @@ def reset_agent_distance_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCf
     logger.debug("Calculating reset agent total reward...")
     cam_width, cam_height = env.unwrapped.get_camera_dimensions()
 
-    # max distance in the image is the diagonal
-    max_distance = np.sqrt(cam_width**2 + cam_height**2)
-
-    car_pos: torch.Tensor = env.unwrapped.current_observation[:, :2]  # (N, 2)
+    car_pos: torch.Tensor = env.unwrapped.current_observation["pos"]  # (N, 2)
     destination_pos: torch.Tensor = env.unwrapped.destination_pos  # (N, 2)
-
     # Compute pairwise distances on GPU: (N, N)
     distances = torch.cdist(car_pos, destination_pos, p=2)
     # Distance from each car to its own destination (diagonal)
     per_env_distance = distances.diagonal()
-    distance_reward =  1 - per_env_distance / max_distance  # Normalize and invert so that closer to destination is higher reward
+
+    if env.unwrapped.previous_distance_to_goal is None:
+        env.unwrapped.previous_distance_to_goal = per_env_distance.clone()
+        distance_reward = torch.zeros_like(per_env_distance)
+    else:
+        # Reward is the change in distance to the goal since last step
+        distance_reward = env.unwrapped.previous_distance_to_goal - per_env_distance
+        env.unwrapped.previous_distance_to_goal = per_env_distance.clone()
+        # scale 
+        distance_reward = distance_reward / 2
+
+
+    # max distance in the image is 1/2 of the diagonal of the image
+    # max_distance = float(np.sqrt(cam_width**2 + cam_height**2)//2)
+    # k = torch.tensor(-0.01, device=env.device)
+
+    # # Reward is based on distance to the destination, different if within or outside of
+    # # ROI region. Using an exponential reward within the ROI to encourage getting closer, 
+    # # and a linear reward outside the ROI.
+    # linear_distance_reward = 1 - per_env_distance / max_distance
+    # exp_distance_reward = (torch.exp(k * max_distance) - torch.exp(k * per_env_distance)) / (torch.exp(k * max_distance) - 1)
+
+    # distance_reward = torch.where(per_env_distance > max_distance, linear_distance_reward, exp_distance_reward)
 
     logger.debug_lazy("Pairwise distances shape: %s", lambda: distances.shape)
     logger.debug_lazy("Per-env distance to destination: %s", lambda: per_env_distance)
@@ -299,7 +317,7 @@ def get_terminal_bonus(env: ManagerBasedRLEnv, bonus: float) -> torch.Tensor:
     logger.debug("Calculating terminal bonus...")
 
     # get robot position and destination position and check if they are close enough
-    robot_pos = env.unwrapped.current_observation[:, :2]  # (N, 2), we only care about x and y
+    robot_pos = env.unwrapped.current_observation["pos"]  # (N, 2)
     destination_pos = env.destination_pos  # (N, 2)
     
     # Check if agent reached the goal (within threshold distance)
@@ -336,16 +354,41 @@ def heading_alignment_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     logger = get_logger(env)
     logger.debug("Calculating heading alignment reward...")
 
-    current_observation = env.unwrapped.current_observation
+    heading_vec = env.unwrapped.current_observation["heading"]  # (N, 2)
+    direction_to_goal = env.unwrapped.current_observation["direction_to_goal"]  # (N, 2)
 
-    angle_between_heading_goal = current_observation[:, -1]  # (N,) range [0 , pi]
+    # Take dot product of the two vectors
+    alignment = F.cosine_similarity(heading_vec, direction_to_goal, dim=1)  # (N,)
 
-    # compute reward based on this direction angle
-    # reward is 1 when angle is 0 (perfect alignment), 0 when angle is pi (opposite direction)
-    reward = 1 - angle_between_heading_goal / torch.pi  # (N,)
+    logger.debug_lazy("Heading vectors: %s", lambda: heading_vec)
+    logger.debug_lazy("Direction to goal vectors: %s", lambda: direction_to_goal)
+    logger.debug_lazy("Heading alignment reward: %s", lambda: alignment)
 
-    logger.debug_lazy("Heading alignment rewards: %s", lambda: reward)
+    return alignment
 
-    return reward
+def reset_agent_velocity_reward(env: ManagerBasedRLEnv, max_speed: float) -> torch.Tensor:
+    """
+    Reward for the reset agent based on its velocity, encouraging it to move towards the goal.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+    :param max_speed: The maximum speed of the agent for normalization.
+    :type max_speed: float
+
+    :return: Velocity reward for the reset agent.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+    logger.debug("Calculating reset agent velocity reward...")
+
+    car_vels = robot_vel(env, env.unwrapped.robot_cfg)
+
+    # Reward is based on speed, normalized by max speed
+    car_speeds = torch.norm(car_vels, dim=1)  # (N,)
+    velocity_reward = car_speeds / max_speed
+
+    print(f"Car speeds: {car_speeds}")
+
+    return velocity_reward
 
 

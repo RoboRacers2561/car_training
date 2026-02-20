@@ -20,9 +20,9 @@ from isaaclab.sensors import TiledCameraCfg
 from isaaclab.actuators import ImplicitActuatorCfg
 
 from . import mdp
-from car_training.tasks.manager_based.car_training.mdp.rewards import reset_agent_distance_reward, get_terminal_bonus, heading_alignment_reward
+from car_training.tasks.manager_based.car_training.mdp.rewards import reset_agent_distance_reward, get_terminal_bonus, heading_alignment_reward, reset_agent_velocity_reward
 from car_training.tasks.manager_based.car_training.mdp.observation import get_reset_agent_observation
-from car_training.tasks.manager_based.car_training.mdp.termination import out_of_view_termination
+from car_training.tasks.manager_based.car_training.mdp.termination import out_of_view_termination, reached_goal_termination
 from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSteerAckermannAction
 from car_training.tasks.manager_based.car_training.configs.leatherback_params import LeatherbackParamsCfg
 from car_training.tasks.manager_based.car_training.configs.ttr_params import TTRNanoParamsCfg
@@ -209,7 +209,7 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
     robot: ArticulationCfg = LEATHERBACK_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
     # overhead camera
-    overhead_camera: OverheadCameraCfg | None = None
+    # overhead_camera: OverheadCameraCfg | None = None
 
     # lights
     dome_light = AssetBaseCfg(
@@ -266,22 +266,25 @@ class RewardsCfg:
     # Get total reward from mdp.rewards.get_total_reward
     distance_reward = RewTerm(
         func=reset_agent_distance_reward,
-        params={
-            "robot_cfg": SceneEntityCfg("robot"),
-        },
         weight=1.0,
     )
 
     terminal_bonus = RewTerm(
         func=get_terminal_bonus,
-        params={"bonus": 5.0,},
-        weight=1.0,
+        params={"bonus": 10.0,},
+        weight=5.0,
     )
 
     heading_alignment_rew = RewTerm(
         func=heading_alignment_reward,
         weight=0.8,
     )
+
+    # velocity_reward_term = RewTerm(
+    #     func=reset_agent_velocity_reward,
+    #     params={"max_speed": 1.0,},
+    #     weight=0.5,
+    # )
 
     
 
@@ -291,8 +294,7 @@ class TerminationsCfg:
     """Termination terms for the MDP."""
 
     # Reached goal termination
-    # reached_goal_term = DoneTerm(func=reached_goal_termination, 
-    #                          params={"asset_cfg": SceneEntityCfg("robot"),},)
+    reached_goal_term = DoneTerm(func=reached_goal_termination)
     
     out_of_view_term = DoneTerm(func=out_of_view_termination,
                              params={"asset_cfg": SceneEntityCfg("robot"),},)
