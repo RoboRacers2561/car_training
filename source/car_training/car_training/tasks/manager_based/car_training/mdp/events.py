@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Optional
 import logging
 import torch
 import math
+import numpy as np
 
 from PIL import Image
 import omni.usd
@@ -264,12 +265,12 @@ def reset_destination_pos(env: ManagerBasedRLEnv, env_ids: torch.Tensor):
         
         random_point_on_track = choose_rand_point(pts)
         env.unwrapped.destination_pos[eid] = torch.tensor(random_point_on_track, device=env.device)
-    
+        env.unwrapped.destination_yaw_deg[eid] = np.random.uniform(-180, 180)  # random yaw between -180 and 180 degrees
     # convert destination_pos to world coordinates for setting goal markers
     camera_width, camera_height = env.get_camera_dimensions()
     track_dimensions: tuple = env.scene.cfg.ground_plane.ground_plane_params.each_track_size
     env.unwrapped.destination_pos_world = convert_coords_list(env.destination_pos.cpu().numpy(), track_dimensions, (camera_width, camera_height), image_to_isaaclab=True)
-    env.unwrapped.set_goal_markers(env.destination_pos_world)
+    env.unwrapped.set_goal_markers(env.destination_pos_world, yaw_deg_tensor=env.destination_yaw_deg) # set goal marker positions and orientations
 
 
     

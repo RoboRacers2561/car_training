@@ -6,6 +6,7 @@ import torch
 from pathlib import Path
 import omni
 from pxr import UsdGeom, Gf
+import numpy as np
 
 PORJECT_ROOT = Path(__file__).resolve().parents[8]
 print(f"Project root: {PORJECT_ROOT}")
@@ -43,6 +44,7 @@ class CarResetEnv(ManagerBasedRLEnv):
 
         self.destination_pos = torch.zeros((self.num_envs, 2), device=self.device) # this will be updated at each reset based on the track points
         self.destination_pos_world = [] # this will be updated at each reset based on the track points, in world coordinates
+        self.destination_yaw_deg = torch.zeros(self.num_envs, device=self.device) # this will be updated at each reset based on the track points, in world coordinates
         self._static_track_inited = False
         self.static_track_image = None # will be initialized on first reset
         self.track_points = [] # will be initialized on first reset
@@ -123,7 +125,7 @@ class CarResetEnv(ManagerBasedRLEnv):
                 self.track_points.append(track_points)
                 random_point_on_track = choose_rand_point(track_points)
                 self.destination_pos[index] = torch.tensor(random_point_on_track, device=self.device)
-            
+                self.destination_yaw_deg[index] = np.random.uniform(-180, 180)  # random yaw between -180 and 180 degrees
 
                 # below is needed for random resetting
                 camera_width, camera_height = self.get_camera_dimensions()
@@ -133,9 +135,9 @@ class CarResetEnv(ManagerBasedRLEnv):
                 self.track_points_world.append(world_points)
             
             self.destination_pos_world = convert_coords_list(self.destination_pos.cpu().numpy(), track_dimensions, (camera_width, camera_height), image_to_isaaclab=True)
-            self.set_goal_markers(self.destination_pos_world)
+            self.set_goal_markers(self.destination_pos_world, yaw_deg_tensor=self.destination_yaw_deg) # set initial goal marker positions and orientations
 
-    def ensure_goal_markers(self, num_envs: int, radius: float = 0.2):
+    def ensure_goal_markers(self, num_envs: int, radius: float = 0.1):
         """
         Creates a visual marker in the simulator for the goal position of each environment. This is only useful for debugging and visualization purposes.
         
@@ -154,32 +156,51 @@ class CarResetEnv(ManagerBasedRLEnv):
                 UsdGeom.Gprim(sphere.GetPrim()).CreateDisplayColorAttr().Set([(1.0, 0.0, 0.0)])  # red
                 # make sure it has a translate op
                 UsdGeom.Xformable(sphere.GetPrim()).AddTranslateOp()
-    
-    def set_goal_markers(self, goal_pos_w):  # shape: (num_envs, 2)
-        """
-        Sets the position of the goal markers in the simulator based on the provided world coordinates. For visualization purposes only.
+            # ---- Add arrow under the marker ----
+            arrow_path = f"{path}/Arrow"
+            arrow_prim = stage.GetPrimAtPath(arrow_path)
+            if not arrow_prim or not arrow_prim.IsValid():
+                arrow_prim = self._define_arrow(stage, arrow_path, color=(0.0, 1.0, 0.0))  # green arrow
+
+                arrow_xf = UsdGeom.Xformable(arrow_prim)
+
+                # Make sure arrow has ops we can drive later
+                # (translate + orient; you can also add scale if you want)
+                arrow_xf.AddTranslateOp()  # local offset relative to marker if desired
+                arrow_xf.AddOrientOp()
         
-        :param goal_pos_w: A list of (x, y) tuples representing the goal positions in world coordinates for each environment.
-        :type goal_pos_w: list[tuple[float, float]]
-        """
+    
+    def set_goal_markers(self, goal_pos_w, yaw_deg_tensor: torch.Tensor):
         stage = omni.usd.get_context().get_stage()
         num_envs = len(goal_pos_w)
 
         for i in range(num_envs):
-            path = f"/World/envs/env_{i}/GoalMarker"
-            prim = stage.GetPrimAtPath(path)
-            if not prim or not prim.IsValid():
+            marker_path = f"/World/envs/env_{i}/GoalMarker"
+            marker_prim = stage.GetPrimAtPath(marker_path)
+            if not marker_prim or not marker_prim.IsValid():
                 continue
 
-            xform = UsdGeom.Xformable(prim)
-            ops = xform.GetOrderedXformOps()
-            if not ops:
-                op = xform.AddTranslateOp()
-            else:
-                op = ops[0]  # first op is translate (if you created it that way)
-
+            # Move the marker sphere
+            marker_xf = UsdGeom.Xformable(marker_prim)
+            marker_t = self.get_or_create_translate_op(marker_xf)
             p = goal_pos_w[i]
-            op.Set(Gf.Vec3d(float(p[0]), float(p[1]), 0.1))  # set z to 0.1 to avoid z-fighting with the ground
+            marker_t.Set(Gf.Vec3d(float(p[0]), float(p[1]), 0.1))
+
+            # Arrow
+            arrow_path = f"{marker_path}/Arrow"
+            arrow_prim = stage.GetPrimAtPath(arrow_path)
+            if not arrow_prim or not arrow_prim.IsValid():
+                continue
+
+            arrow_xf = UsdGeom.Xformable(arrow_prim)
+            arrow_t = self.get_or_create_translate_op(arrow_xf)          # local offset
+            orient_op = self.get_or_create_orient_op_float(arrow_xf)     # existing or created
+
+            arrow_t.Set(Gf.Vec3d(0.0, 0.0, 0.15))  # lift arrow above sphere/ground
+
+            yaw_deg =  float(yaw_deg_tensor[i])  # convert from tensor to float
+            q_d = Gf.Rotation(Gf.Vec3d(0, 0, 1), yaw_deg).GetQuat()
+            orient_op.Set(self.quatd_to_quatf(q_d))
 
     def get_camera_dimensions(self) -> tuple[int, int]:
         """
@@ -194,5 +215,70 @@ class CarResetEnv(ManagerBasedRLEnv):
         else:
             # return self.static_track_image.shape[2], self.static_track_image.shape[1]
             return 512, 384
+
+    def _define_arrow(self, stage, arrow_xf_path: str,
+                  shaft_len=0.45, shaft_r=0.03,
+                  head_len=0.15, head_r=0.06,
+                  color=(0.0, 1.0, 0.0)):
+        """
+        Creates:
+        arrow_xf_path (Xform)
+            ├─ Shaft (Cylinder)
+            └─ Head  (Cone)
+        Oriented by default along +X (so yaw about Z is intuitive for 2D).
+        """
+
+        arrow_xf = UsdGeom.Xform.Define(stage, arrow_xf_path)
+        arrow_prim = arrow_xf.GetPrim()
+
+        # Shaft
+        shaft_path = f"{arrow_xf_path}/Shaft"
+        shaft = UsdGeom.Cylinder.Define(stage, shaft_path)
+        shaft.GetRadiusAttr().Set(shaft_r)
+        shaft.GetHeightAttr().Set(shaft_len)
+        UsdGeom.Gprim(shaft.GetPrim()).CreateDisplayColorAttr().Set([color])
+
+        # Head
+        head_path = f"{arrow_xf_path}/Head"
+        head = UsdGeom.Cone.Define(stage, head_path)
+        head.GetRadiusAttr().Set(head_r)
+        head.GetHeightAttr().Set(head_len)
+        UsdGeom.Gprim(head.GetPrim()).CreateDisplayColorAttr().Set([color])
+
+        shaft_xf = UsdGeom.Xformable(shaft.GetPrim())
+        head_xf  = UsdGeom.Xformable(head.GetPrim())
+
+        # Rotate child shapes so local +Z becomes +X (rotate +90° about Y)
+        rot_d = Gf.Rotation(Gf.Vec3d(0, 1, 0), 90).GetQuat()   # Quatd
+        rot_f = self.quatd_to_quatf(rot_d)  # Quatf
+
+        # IMPORTANT: create orient ops as float precision
+        shaft_xf.AddOrientOp(UsdGeom.XformOp.PrecisionFloat).Set(rot_f)
+        head_xf.AddOrientOp(UsdGeom.XformOp.PrecisionFloat).Set(rot_f)
+
+        # Translate them along +X (since after rotation they point along +X)
+        shaft_xf.AddTranslateOp().Set(Gf.Vec3d(shaft_len * 0.5, 0.0, 0.0))
+        head_xf.AddTranslateOp().Set(Gf.Vec3d(shaft_len + head_len * 0.5, 0.0, 0.0))
+
+        return arrow_prim
+
+    def quatd_to_quatf(self, qd: Gf.Quatd) -> Gf.Quatf:
+        """Convert a Gf.Quatd to Gf.Quatf (float), handling Vec3d -> Vec3f."""
+        im_d = qd.GetImaginary()  # usually Gf.Vec3d
+        im_f = Gf.Vec3f(float(im_d[0]), float(im_d[1]), float(im_d[2]))
+        return Gf.Quatf(float(qd.GetReal()), im_f)
+
+    def get_or_create_translate_op(self, xf: UsdGeom.Xformable) -> UsdGeom.XformOp:
+        for op in xf.GetOrderedXformOps():
+            if op.GetOpType() == UsdGeom.XformOp.TypeTranslate:
+                return op
+        return xf.AddTranslateOp()
+
+    def get_or_create_orient_op_float(self, xf: UsdGeom.Xformable) -> UsdGeom.XformOp:
+        for op in xf.GetOrderedXformOps():
+            if op.GetOpType() == UsdGeom.XformOp.TypeOrient:
+                return op
+        # Only create if missing
+        return xf.AddOrientOp(UsdGeom.XformOp.PrecisionFloat)
 
 
