@@ -3,6 +3,7 @@ from __future__ import annotations
 import torch
 from typing import TYPE_CHECKING, Optional
 
+from car_training.tasks.manager_based.car_training.mdp.events import reset_destination_pos
 from isaaclab.assets import Articulation
 from isaaclab.managers import SceneEntityCfg
 
@@ -69,8 +70,22 @@ def reached_goal_termination(env: ManagerBasedRLEnv) -> torch.Tensor:
     Returns:
         torch.Tensor: A tensor indicating which episodes should terminate.
     """
+
+    robot_pos = env.unwrapped.current_observation["pos"]  # (N, 2)
+    destination_pos = env.destination_pos  # (N, 2)
     
-    return env.unwrapped.reached_goal_flags # this is modified inside rewards
+    # Check if agent reached the goal (within threshold distance)
+    distance_to_goal = torch.norm(robot_pos - destination_pos, dim=1)  # (N,)
+    goal_threshold = env.unwrapped.goal_distance_threshold
+    reached_goal_flags = distance_to_goal < goal_threshold
+
+    env_ids_reached_goal = torch.where(reached_goal_flags)[0]
+
+    env.unwrapped.reached_goal_flags = reached_goal_flags # store this in the env for use in rewards and logging
+    
+    reset_destination_pos(env, env_ids_reached_goal) # reset the destination for the envs that reached the goal so that they can continue training towards the next destination in the same episode
+    
+    return reached_goal_flags # this is modified inside rewards
 
 def out_of_view_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     """
@@ -91,5 +106,7 @@ def out_of_view_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -
     outside_view = (robot_pos[:, 0] < 0) | (robot_pos[:, 0] > cam_width) | (robot_pos[:, 1] < 0) | (robot_pos[:, 1] > cam_height)
     
     logger.debug_lazy("Outside view flags: %s", lambda: outside_view)
+
+    env.unwrapped.out_of_bounds_flags = outside_view # store this in the env for use in rewards and logging
 
     return outside_view

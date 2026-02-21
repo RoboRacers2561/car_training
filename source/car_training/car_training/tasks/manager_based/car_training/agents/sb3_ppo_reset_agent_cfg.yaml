@@ -1,9 +1,9 @@
 # Reference: https://github.com/DLR-RM/rl-baselines3-zoo/blob/master/hyperparams/ppo.yml#L32
 seed: 42
 
-n_timesteps: !!float 1e6
+n_timesteps: !!float 10e6
 policy: 'MlpPolicy'
-n_steps: 1024
+n_steps: 12
 batch_size: 256
 gae_lambda: 0.95
 gamma: 0.99
@@ -18,3 +18,5 @@ policy_kwargs:
 vf_coef: 1.0
 max_grad_norm: 1.0
 device: "cuda:0"
+use_sde: True
+sde_sample_freq: 4

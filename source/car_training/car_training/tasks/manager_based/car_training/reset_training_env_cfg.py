@@ -20,7 +20,7 @@ from isaaclab.sensors import TiledCameraCfg
 from isaaclab.actuators import ImplicitActuatorCfg
 
 from . import mdp
-from car_training.tasks.manager_based.car_training.mdp.rewards import reset_agent_distance_reward, get_terminal_bonus, heading_alignment_reward, reset_agent_velocity_reward
+from car_training.tasks.manager_based.car_training.mdp.rewards import reset_agent_distance_reward, get_terminal_bonus, heading_alignment_reward, reset_agent_velocity_reward, turning_penalty
 from car_training.tasks.manager_based.car_training.mdp.observation import get_reset_agent_observation
 from car_training.tasks.manager_based.car_training.mdp.termination import out_of_view_termination, reached_goal_termination
 from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSteerAckermannAction
@@ -266,7 +266,7 @@ class RewardsCfg:
     # Get total reward from mdp.rewards.get_total_reward
     distance_reward = RewTerm(
         func=reset_agent_distance_reward,
-        weight=1.0,
+        weight=3.0,
     )
 
     terminal_bonus = RewTerm(
@@ -277,14 +277,19 @@ class RewardsCfg:
 
     heading_alignment_rew = RewTerm(
         func=heading_alignment_reward,
-        weight=0.8,
+        weight=1.0,
     )
 
-    # velocity_reward_term = RewTerm(
-    #     func=reset_agent_velocity_reward,
-    #     params={"max_speed": 1.0,},
-    #     weight=0.5,
-    # )
+    velocity_reward_term = RewTerm(
+        func=reset_agent_velocity_reward,
+        params={"max_speed": 0.8, "asset_cfg": SceneEntityCfg("robot"),},
+        weight=0.5,
+    )
+
+    turning_penalty_term = RewTerm(
+        func=turning_penalty,
+        weight=2.0,
+    )
 
     
 

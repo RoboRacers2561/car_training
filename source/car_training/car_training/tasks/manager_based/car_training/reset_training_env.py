@@ -52,7 +52,9 @@ class CarResetEnv(ManagerBasedRLEnv):
         self.action_driver: ThrottleSteerAckermannAction = self.action_manager._terms["drive"] # this is a ThrottleSteerAckermannAction
         self.goal_distance_threshold = 20 # threshold is number of pixels
         self.reached_goal_flags = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device) # to keep track of which envs have reached the goal
-        self.previous_distance_to_goal = None # to keep track of the previous distance to goal for reward calculation
+        self.out_of_bounds_flags = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device) # to keep track of which envs are out of bounds
+        self.previous_distance_to_goal = torch.zeros(self.num_envs, device=self.device) # to keep track of the previous distance to goal for each env, used in reward calculation
+        self.skip_distance_reward_next = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device) # flag to indicate whether to skip distance reward for the next step for each env, used to avoid giving distance reward on the same step as reaching the goal
 
     def reset(self, seed = None, env_ids = None, options = None) -> tuple[dict[str, torch.Tensor], dict]:
         """
