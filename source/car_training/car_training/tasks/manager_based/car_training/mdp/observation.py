@@ -300,6 +300,7 @@ def get_reset_agent_observation(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCf
     :rtype: torch.Tensor
     """
     logger = get_logger(env)
+    image_width, image_height = env.unwrapped.get_camera_dimensions()
 
     pos = robot_pos(env, asset_cfg, do_convert_coords=True)  # (N, 2)
     heading = robot_heading(env, asset_cfg)  # (N, 2)
@@ -320,9 +321,11 @@ def get_reset_agent_observation(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCf
     distance_to_goal = torch.norm(vec_to_goal, dim=1, keepdim=True)  # (N, 1)
     direction_to_goal = vec_to_goal / (distance_to_goal + 1e-8)  # (N, 2)
 
+    distance_to_goal_normalized = distance_to_goal / torch.norm(torch.tensor([float(image_width), float(image_height)], device=distance_to_goal.device))  # (N, 1)
+
     angle_of_vec_to_goal_with_vertical = torch.atan2(direction_to_goal[:, 0], -direction_to_goal[:, 1])  # (N,)
 
-    observation = torch.cat((speed.unsqueeze(-1), distance_to_goal, direction_to_goal, angle_of_vec_to_goal_with_vertical.unsqueeze(-1)), dim=-1)  # (N, 2 + 2 + 2 + 2 + 1 + 2 + 1) = (N, 12)
+    observation = torch.cat((speed.unsqueeze(-1), distance_to_goal_normalized, direction_to_goal, angle_of_vec_to_goal_with_vertical.unsqueeze(-1)), dim=-1)  # (N, 2 + 2 + 2 + 2 + 1 + 2 + 1) = (N, 12)
 
     logger.debug_lazy("Reset agent observation: %s", lambda: observation)
 
@@ -388,6 +391,7 @@ def get_reset_agent_observation(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCf
         "speed": speed.clone(),
         "destination": destination.clone(),
         "distance_to_goal": distance_to_goal.clone(),
+        "distance_to_goal_normalized": distance_to_goal_normalized.clone(),
         "direction_to_goal": direction_to_goal.clone(),
         "angle_of_vec_to_goal_with_vertical": angle_of_vec_to_goal_with_vertical.clone(),
     }
