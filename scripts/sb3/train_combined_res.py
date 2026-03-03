@@ -29,6 +29,8 @@ parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
 parser.add_argument("--max_iterations", type=int, default=None, help="RL Policy training iterations.")
 parser.add_argument("--debug", action="store_true", default=False, help="Enable debug mode which will enable debug log level on internals.")
+parser.add_argument("--checkpoint", type=str, default=None, help="Path to model checkpoint.")
+
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -81,11 +83,6 @@ from isaaclab_tasks.utils.hydra import hydra_task_config
 from car_training.tasks.manager_based.car_training.agents.feature_extractor import CustomMultiInputExtractor
 import logging
 
-
-
-
-
-    
 def _free_port():
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
@@ -202,7 +199,13 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         )
 
     # create agent from stable baselines
-    agent = PPO(policy_arch, env, verbose=1, **agent_cfg)
+    if args_cli.checkpoint is None:
+        print("[INFO] No checkpoint provided. Training from scratch.")
+        agent = PPO(policy_arch, env, verbose=1, **agent_cfg)
+    else:
+        print(f"[INFO] Loading checkpoint from: {args_cli.checkpoint}")
+        agent = PPO.load(args_cli.checkpoint, env, print_system_info=True)
+
     # configure the logger
     new_logger = configure(log_dir, ["stdout", "tensorboard"])
     agent.set_logger(new_logger)
