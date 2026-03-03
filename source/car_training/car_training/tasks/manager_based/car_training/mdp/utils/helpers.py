@@ -139,6 +139,41 @@ def __find_closest_track_point(car_center: tuple[float, float], track_points_lis
     closest_index = np.argmin(distances)
     return track_points_list[closest_index]
 
+def find_closest_track_points(
+    car_centers: torch.Tensor,        # (N, 2)
+    track_padded: torch.Tensor,        # (N, T, 2)
+    lengths: torch.Tensor              # (N,)
+) -> torch.Tensor:
+    """
+    For each environment, find the closest track point to its car center.
+
+    :param car_centers: Tensor of shape (N, 2) containing the (x, y) coordinates of the car centers for N environments.
+    :type car_centers: torch.Tensor
+    :param track_padded: Tensor of shape (N, T, 2) containing the padded track points for N environments, where T is the maximum number of track points across all environments.
+    :type track_padded: torch.Tensor
+    :param lengths: Tensor of shape (N,) containing the actual number of track points for each environment (before padding).
+    :type lengths: torch.Tensor
+    """
+    
+    N, Tmax, _ = track_padded.shape
+
+    # (N, Tmax)
+    dist2 = torch.sum((track_padded - car_centers.unsqueeze(1))**2, dim=2)
+
+    # mask padded indices
+    idxs = torch.arange(Tmax, device=track_padded.device).unsqueeze(0)  # (1, Tmax)
+    valid = idxs < lengths.unsqueeze(1)                                 # (N, Tmax)
+
+    dist2 = dist2.masked_fill(~valid, float("inf"))
+
+    # (N,)
+    closest_idx = torch.argmin(dist2, dim=1)
+
+    # (N, 2)
+    batch = torch.arange(N, device=track_padded.device)
+    closest_pts = track_padded[batch, closest_idx]
+    return closest_pts
+
 
 def velocity_reward(car_speed: float, max_speed: float, weight=1.0):
     """

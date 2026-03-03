@@ -20,7 +20,7 @@ from isaaclab.sensors import TiledCameraCfg
 from isaaclab.actuators import ImplicitActuatorCfg
 
 from . import mdp
-from car_training.tasks.manager_based.car_training.mdp.rewards import get_total_reward
+from car_training.tasks.manager_based.car_training.mdp.rewards import distance_from_center_reward, steering_jerk_penalty, velocity_reward, remains_alive_reward
 from car_training.tasks.manager_based.car_training.mdp.observation import  (
     aligned_track_neighborhood_image,
     robot_vel,
@@ -213,7 +213,7 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
     robot: ArticulationCfg = LEATHERBACK_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
     # overhead camera
-    overhead_camera: OverheadCameraCfg | None = None
+    # overhead_camera: OverheadCameraCfg | None = None
 
     # lights
     dome_light = AssetBaseCfg(
@@ -284,14 +284,42 @@ class RewardsCfg:
     """Reward terms for the MDP."""
 
     # Get total reward from mdp.rewards.get_total_reward
-    total_reward = RewTerm(
-        func=get_total_reward,
+    # total_reward = RewTerm(
+    #     func=get_total_reward,
+    #     params={
+    #         "robot_cfg": SceneEntityCfg("robot"),
+    #         "max_speed": 1,    # TODO: Replace with actual max speed
+    #     },
+    #     weight=1.0,
+    # )
+
+    distance_from_center_rew_term = RewTerm(
+        func=distance_from_center_reward,
         params={
             "robot_cfg": SceneEntityCfg("robot"),
-            "max_speed": 1,    # TODO: Replace with actual max speed
         },
-        weight=1.0,
+        weight=3.0,
     )
+
+    velocity_rew_term = RewTerm(
+        func=velocity_reward,
+        params={
+            "robot_cfg": SceneEntityCfg("robot"),
+            "max_speed": 1.0, # TODO: Replace with actual max speed
+        },
+        weight=1.5,
+    )
+
+    remain_alive_rew_term = RewTerm(
+        func=remains_alive_reward,
+        weight=0.2
+        )
+    
+    steering_jerk_penalty_term = RewTerm(
+        func=steering_jerk_penalty,
+        weight=0.003
+    )
+
 
 
 @configclass

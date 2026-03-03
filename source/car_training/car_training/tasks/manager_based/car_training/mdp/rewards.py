@@ -20,7 +20,7 @@ import cv2
 import logging
 import torch.nn.functional as F
 
-from car_training.tasks.manager_based.car_training.mdp.utils.helpers import *
+from car_training.tasks.manager_based.car_training.mdp.utils.helpers import find_closest_track_points
 from car_training.tasks.manager_based.car_training.mdp.observation import (
     robot_pos,
     aligned_robot_vel,
@@ -31,6 +31,9 @@ from car_training.tasks.manager_based.car_training.mdp.utils.training_logging im
 )
 
 _LOGGER: Optional[GpuSafeLogger] = None
+
+MAX_DISTANCE_FROM_LINE = 45
+
 
 
 def get_logger(env: ManagerBasedRLEnv) -> GpuSafeLogger:
@@ -151,13 +154,85 @@ def get_total_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg, max_spee
 
     return total_reward
 
+def distance_from_center_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg) -> torch.Tensor:
+    """
+    Reward for being close to the center of the track.
 
-def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.Tensor:
+    :param env: The environment instance containing the track and robot information.
+    :type env: ManagerBasedRLEnv
+    :param robot_cfg: Configuration for the robot to extract its position.
+    :type robot_cfg: SceneEntityCfg
+
+    :return: Distance from center reward.
+    :rtype: torch.Tensor
+    """
+    car_centers = robot_pos(env, robot_cfg, do_convert_coords=True)
+    track_points = env.track_points_tensor  # (num_envs, num_track_points, 2)
+    track_points_lengths = env.track_points_lengths  # (num_envs,)
+
+    closest_track_points = find_closest_track_points(car_centers, track_points, track_points_lengths)  # (num_envs, 2)
+    distances = torch.norm(car_centers - closest_track_points, dim=1)  #
+
+    max_distance = MAX_DISTANCE_FROM_LINE
+    normalized_distances = distances / max_distance
+    # Reward is higher when the distance is smaller
+    reward = 1.0 - normalized_distances
+    return reward
+
+def velocity_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg, max_speed: float) -> torch.Tensor:
+    """
+    Reward for maintaining a high speed.
+
+    :param env: The environment instance containing the robot information.
+    :type env: ManagerBasedRLEnv
+    :param robot_cfg: Configuration for the robot to extract its velocity.
+    :type robot_cfg: SceneEntityCfg
+    :param max_speed: Maximum speed of the car for normalization.
+    :type max_speed: float
+
+    :return: Velocity reward.
+    :rtype: torch.Tensor
+    """
+    car_vels = aligned_robot_vel(env, robot_cfg)
+    car_speeds = torch.norm(car_vels, dim=1)
+    normalized_speeds = car_speeds / max_speed
+    return normalized_speeds
+
+def remains_alive_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """
+    Returns a constant reward for remaining alive.
+
+    :return: Constant reward value.
+    :rtype: torch.Tensor
+    """
+    return torch.ones((env.num_envs,), device=env.device)
+
+def leaves_track_penalty(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg) -> torch.Tensor:
+    """
+    Penalty for leaving the track.
+
+    :param env: The environment instance containing the track and robot information.
+    :type env: ManagerBasedRLEnv
+    :param robot_cfg: Configuration for the robot to extract its position.
+    :type robot_cfg: SceneEntityCfg
+
+    :return: Track leaving penalty.
+    :rtype: torch.Tensor
+    """
+    car_centers = robot_pos(env, robot_cfg, do_convert_coords=True)
+    track_points = env.track_points_tensor  # (num_envs, num_track_points, 2)
+    track_points_lengths = env.track_points_lengths  # (num_envs,)
+
+    closest_track_points = find_closest_track_points(car_centers, track_points, track_points_lengths)  # (num_envs, 2)
+    distances = torch.norm(car_centers - closest_track_points, dim=1)  #
+
+    threshold_distance = 35
+    penalty = torch.where(distances > threshold_distance, 1.0, 0.0)
+    return penalty * -1
+
+def steering_jerk_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     """
     Reward for smooth steering by penalizing large changes in steering angle.
-
-    :param weight: Weight of the smooth steering reward.
-    :type weight: float
 
     :return: Smooth steering reward.
     :rtype: torch.Tensor
@@ -178,30 +253,6 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.
         result = F.conv1d(buffer_input, kernel, padding=0)  # (num_envs, 1, buffer_size-2)
         return result.squeeze(1)  # (num_envs, buffer_size-2) 
 
-    # action_now = drive.action_curr
-    # if torch.isnan(action_now).any():
-    #     raise ValueError(
-    #         "Current action contains NaN in steering_jerk_penalty.")
-
-    # Initialize history on first call
-    # if torch.isnan(drive.action_prev).all() and torch.isnan(drive.action_prev2).all():
-    #     logger.debug("Initializing action history for steering jerk penalty.")
-    #     drive.action_prev = action_now.clone()
-    #     drive.action_prev2 = action_now.clone()
-    #     return torch.zeros((env.num_envs,), device=env.device)
-    # elif torch.isnan(drive.action_prev).any() or torch.isnan(drive.action_prev2).any():
-    #     # Not all NaN, but some NaN values exist which is because of reset of some envs
-    #     logger.debug(
-    #         "Partial NaN detected in action history; initializing missing values for steering jerk penalty."
-    #     )
-    #     nan_prev = torch.isnan(drive.action_prev).any(dim=1)
-    #     nan_prev2 = torch.isnan(drive.action_prev2).any(dim=1)
-    #     drive.action_prev[nan_prev] = action_now[nan_prev].clone()
-    #     drive.action_prev2[nan_prev2] = action_now[nan_prev2].clone()
-
-    # steer_now = action_now[:, 1]
-    # steer_prev = drive.action_prev[:, 1]
-    # steer_prev2 = drive.action_prev2[:, 1]
     steer_buffer = drive.action_buffer[:, :, 1]
     
     min_buffer_size = 3
@@ -213,7 +264,7 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.
         return torch.zeros((env.num_envs,), device=env.device)
     # dt is optional; keep if you want rate-invariance
     dt = env.cfg.sim.dt * env.cfg.decimation
-    #j = (steer_now - 2.0 * steer_prev + steer_prev2) / (dt * dt)
+    
     #Updated j with filter 
     j = d2_filter(steer_buffer)/(dt*dt)
 
@@ -228,20 +279,13 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.
     num_valid = mask.sum(dim=1).float().clamp(min=1.0)
     j_rms = torch.sqrt(j_sqr_mask.sum(dim=1) / num_valid)
 
-    penalty = -weight * (j_rms)
+    penalty = -1 * (j_rms)
 
-    # logger.debug_lazy("Steering angles now: %s", lambda: steer_now)
-    # logger.debug_lazy("Steering angles prev: %s", lambda: steer_prev)
-    # logger.debug_lazy("Steering angles prev2: %s", lambda: steer_prev2)
     logger.debug_lazy("Steering angles prev2: %s", lambda: steer_buffer)
     logger.debug_lazy("Decimation: %s", lambda: env.cfg.decimation)
     logger.debug_lazy("Sim dt: %s", lambda: env.cfg.sim.dt)
     logger.debug_lazy("Control timestep dt: %s", lambda: dt)
     logger.debug_lazy("Steering jerk: %s", lambda: j)
     logger.debug_lazy("Smooth steering reward: %s", lambda: penalty)
-
-    # IMPORTANT: shift history ONCE per RL step (reward is called once per RL step)
-    # drive.action_prev2 = drive.action_prev.clone()
-    # drive.action_prev = action_now.clone()
 
     return penalty
