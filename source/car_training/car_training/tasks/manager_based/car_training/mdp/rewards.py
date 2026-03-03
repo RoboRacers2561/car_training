@@ -32,7 +32,7 @@ from car_training.tasks.manager_based.car_training.mdp.utils.training_logging im
 
 _LOGGER: Optional[GpuSafeLogger] = None
 
-MAX_DISTANCE_FROM_LINE = 45
+MAX_DISTANCE_FROM_LINE = 40
 
 
 
@@ -53,106 +53,6 @@ def get_logger(env: ManagerBasedRLEnv) -> GpuSafeLogger:
         short_name = ".".join(__name__.split(".")[-2:])
         _LOGGER = base.getChild(short_name)
     return _LOGGER
-
-
-def get_total_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg, max_speed: float) -> torch.Tensor:
-    """
-    Calculate the total reward based on multiple factors.
-
-    :param completed_laps: Number of laps completed by the car.
-    :type completed_laps: int
-    :param total_laps: Total number of laps in the race.
-    :type total_laps: int
-    :param max_speed: Maximum speed of the car.
-    :type max_speed: float
-
-    :return: Total reward calculated from various factors.
-    :rtype: float
-    """
-    logger = get_logger(env)
-
-    logger.debug("Calculating total reward...")
-
-    # camera: Articulation = env.scene["overhead_camera"]
-
-    # rgb = camera.data.output['rgb']
-
-    # rgb_cpu = rgb.detach().cpu().numpy()
-
-    car_centers = (
-        robot_pos(env, robot_cfg, do_convert_coords=True).detach().cpu().numpy()
-    )
-    # car_vels = robot_vel(env, robot_cfg).detach().cpu().numpy()
-    car_vels = aligned_robot_vel(env, robot_cfg).detach().cpu().numpy()
-    car_speeds = np.linalg.norm(car_vels, axis=1)
-
-    num_envs = car_centers.shape[0]
-    rewards = np.empty((num_envs,), dtype=np.float32)
-
-    for i in range(num_envs):
-        # for each copy of the simulation find the track points and compute the reward
-        # frame = rgb_cpu[i]
-        track_points_list = env.unwrapped.track_points[i]
-
-        # draw track points for debugging
-        # for point in track_points_list:
-        #     cv2.circle(frame, (int(point[0]), int(point[1])), 3, (0, 255, 0), -1)  # Draw track points in green
-        # cv2.imwrite(f"debug_image_with_track_points_{i}.png", frame)  # Save the image with track points for debugging
-
-        car_center = car_centers[i]
-        car_speed = float(car_speeds[i])
-        # car_heading = robot_heading(env, robot_cfg).cpu().numpy()[index]
-        logger.debug(f"car_speed type: {type(car_speed)}")
-        logger.debug_lazy("car speed %s", lambda: car_speed)
-
-        # draw the velocity vector on the image for debugging
-        # start_point = (int(car_center[0]), int(car_center[1]))
-        # end_point = (int(car_center[0] + car_vels[i][0]*100), int(car_center[1] + car_vels[i][1]*100))
-        # cv2.arrowedLine(frame, start_point, end_point, (255, 0, 0), 2)  # Draw velocity vector in blue
-        # end_point = (int(car_center[0] + 50 * car_heading[0]), int(car_center[1] + 50 * car_heading[1]))
-        # cv2.arrowedLine(frame, start_point, end_point, (255, 0, 0), 2)  # Draw heading vector in blue
-        # cv2.circle(frame, (int(car_center[0]), int(car_center[1])), 5, (0, 255, 0), -1)  # Draw car center in green
-        # cv2.imwrite(f"debug_image_with_velocity_{i}.png", frame)  # Save the image with velocity vector for debugging
-
-        # cropped_image = env.observation_manager.compute_group("policy")["image"]
-        # debug_cropped_image = cropped_image[0, 0].cpu().numpy() * 255
-        # debug_cropped_image = cv2.cvtColor(debug_cropped_image.astype(np.uint8), cv2.COLOR_GRAY2BGR)
-
-        # cv2.arrowedLine(debug_cropped_image, (24, 24), (24 + int(car_vels[i][0]*30), 24 + int(car_vels[i][1]*30)), (255, 0, 0), 2)  # Draw velocity vector in blue
-        # cv2.imwrite(f"debug_cropped_image_with_velocity_{i}.png", debug_cropped_image)  # Save the cropped image with velocity vector for debugging
-
-        # cv2.circle(frame, (int(car_center[0]), int(car_center[1])), 5, (0, 0, 255), -1)  # Draw car center in red
-        # cv2.imwrite(f"debug_image_with_car_center_{i}.png", frame)  # Save the image with car center for debugging
-        # print(f"type of car_center: {type(car_center)}, shape: {car_center.shape}")
-        # print(f"Car center: {car_center}, Car velocity: {car_velocity}, Car speed: {car_speed}")
-
-        # Now compute the reward for each simulation copy
-        distance_reward = distance_from_center_reward(
-            car_center, track_points_list, weight=3.0
-        )
-        # print(f"Distance reward: {distance_reward}")
-        velocity_reward_value = velocity_reward(
-            car_speed, max_speed, weight=1.5)
-        alive_reward = remains_alive_reward(weight=0.2)
-        track_penalty = leaves_track_penalty(
-            car_center, track_points_list, weight=0.5)
-
-        total_reward = (
-            distance_reward + velocity_reward_value + alive_reward - track_penalty
-        )
-
-        rewards[i] = total_reward
-        logger.debug(
-            f"Simulation {i}: Distance Reward: {distance_reward}, Velocity Reward: {velocity_reward_value}, Alive Reward: {alive_reward}, Track Penalty: {track_penalty}, Total Reward: {total_reward}"
-        )
-
-    total_reward_no_smoothing = torch.from_numpy(rewards).to(device=env.device)
-    smooth_steering = steering_jerk_penalty(env, weight=0.003)
-    total_reward = total_reward_no_smoothing + smooth_steering
-    logger.debug_lazy("Total reward with smooth steering: %s",
-                      lambda: total_reward)
-
-    return total_reward
 
 def distance_from_center_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg) -> torch.Tensor:
     """
@@ -206,29 +106,6 @@ def remains_alive_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     :rtype: torch.Tensor
     """
     return torch.ones((env.num_envs,), device=env.device)
-
-def leaves_track_penalty(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg) -> torch.Tensor:
-    """
-    Penalty for leaving the track.
-
-    :param env: The environment instance containing the track and robot information.
-    :type env: ManagerBasedRLEnv
-    :param robot_cfg: Configuration for the robot to extract its position.
-    :type robot_cfg: SceneEntityCfg
-
-    :return: Track leaving penalty.
-    :rtype: torch.Tensor
-    """
-    car_centers = robot_pos(env, robot_cfg, do_convert_coords=True)
-    track_points = env.track_points_tensor  # (num_envs, num_track_points, 2)
-    track_points_lengths = env.track_points_lengths  # (num_envs,)
-
-    closest_track_points = find_closest_track_points(car_centers, track_points, track_points_lengths)  # (num_envs, 2)
-    distances = torch.norm(car_centers - closest_track_points, dim=1)  #
-
-    threshold_distance = 35
-    penalty = torch.where(distances > threshold_distance, 1.0, 0.0)
-    return penalty * -1
 
 def steering_jerk_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     """

@@ -305,7 +305,7 @@ class RewardsCfg:
         func=velocity_reward,
         params={
             "robot_cfg": SceneEntityCfg("robot"),
-            "max_speed": 1.0, # TODO: Replace with actual max speed
+            "max_speed": 0.75, # TODO: Replace with actual max speed
         },
         weight=1.5,
     )
