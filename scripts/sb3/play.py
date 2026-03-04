@@ -81,7 +81,10 @@ from isaaclab.envs import (
     multi_agent_to_single_agent,
 )
 from isaaclab.utils.dict import print_dict
-from isaaclab_rl.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
+try:
+    from isaaclab.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
+except ImportError:
+    from isaaclabrl.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
 
 from isaaclab_rl.sb3 import Sb3VecEnvWrapper, process_sb3_cfg
 
