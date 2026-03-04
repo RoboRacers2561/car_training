@@ -95,6 +95,8 @@ class ThrottleSteerAckermannAction(ActionTerm):
             device=env.device
         )
         self.buffer_count = torch.zeros(env.num_envs, dtype=torch.long, device=env.device)
+
+        self.max_steer = MAX_STEER
         
 
     @property

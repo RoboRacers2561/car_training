@@ -166,3 +166,29 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     logger.debug_lazy("Smooth steering reward: %s", lambda: penalty)
 
     return penalty
+
+
+def turning_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """
+    Penalty for large steering angles, encouraging the reset agent to take smoother turns.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+    :param weight: The weight of the turning penalty.
+    :type weight: float
+
+    :return: Turning penalty for the reset agent.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+    logger.debug("Calculating turning penalty...")
+
+    drive = env.action_manager._terms["drive"]
+    steer = drive._processed_actions[:, 1]  # (N,)
+
+    penalty = -1 * torch.abs(steer) / drive.max_steer # divide by max_steer to normalize
+
+    logger.debug_lazy("Steering angles for turning penalty: %s", lambda: steer)
+    logger.debug_lazy("Turning penalty: %s", lambda: penalty)
+
+    return penalty

@@ -18,3 +18,5 @@ policy_kwargs:
 vf_coef: 1.0
 max_grad_norm: 1.0
 device: "cuda:0"
+use_sde: True
+sde_sample_freq: 4

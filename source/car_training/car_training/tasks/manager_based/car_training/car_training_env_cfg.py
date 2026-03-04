@@ -20,7 +20,7 @@ from isaaclab.sensors import TiledCameraCfg
 from isaaclab.actuators import ImplicitActuatorCfg
 
 from . import mdp
-from car_training.tasks.manager_based.car_training.mdp.rewards import distance_from_center_reward, steering_jerk_penalty, velocity_reward, remains_alive_reward
+from car_training.tasks.manager_based.car_training.mdp.rewards import distance_from_center_reward, steering_jerk_penalty, velocity_reward, remains_alive_reward, turning_penalty
 from car_training.tasks.manager_based.car_training.mdp.observation import  (
     aligned_track_neighborhood_image,
     robot_vel,
@@ -315,10 +315,15 @@ class RewardsCfg:
         weight=0.2
         )
     
-    steering_jerk_penalty_term = RewTerm(
-        func=steering_jerk_penalty,
-        weight=0.003
+    steer_penalty_term = RewTerm(
+        func=turning_penalty,
+        weight=0.5
     )
+    
+    # steering_jerk_penalty_term = RewTerm(
+    #     func=steering_jerk_penalty,
+    #     weight=0.003
+    # )
 
 
 
