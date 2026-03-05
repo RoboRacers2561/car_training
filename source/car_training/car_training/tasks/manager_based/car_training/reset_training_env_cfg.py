@@ -5,7 +5,7 @@
 
 
 import isaaclab.sim as sim_utils
-from isaaclab.assets import ArticulationCfg, AssetBaseCfg
+from isaaclab.assets import ArticulationCfg, AssetBaseCfg, RigidObjectCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
@@ -193,6 +193,21 @@ class OverheadCameraCfg(TiledCameraCfg):
     width: int = camera_params.image.width
     height: int = camera_params.image.height
 
+def make_wall(prim_path: str, size_xyz, pos_xyz) -> RigidObjectCfg:
+    return RigidObjectCfg(
+        prim_path=prim_path,
+        spawn=sim_utils.CuboidCfg(
+            size=size_xyz,  # full extents (x, y, z) in meters
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                kinematic_enabled=True,  # immovable "static" wall
+                disable_gravity=True,
+            ),
+            # optional visual
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.2, 0.2, 0.2)),
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=pos_xyz),
+    )
 
 @configclass
 class CarTrainingSceneCfg(InteractiveSceneCfg):
@@ -217,6 +232,39 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.DomeLightCfg(color=(0.9, 0.9, 0.9), intensity=500.0),
     )
 
+    wall_left: RigidObjectCfg = RigidObjectCfg(prim_path="{ENV_REGEX_NS}/WallLeft")
+    wall_right: RigidObjectCfg = RigidObjectCfg(prim_path="{ENV_REGEX_NS}/WallRight")
+    wall_bottom: RigidObjectCfg = RigidObjectCfg(prim_path="{ENV_REGEX_NS}/WallBottom")
+    wall_top: RigidObjectCfg = RigidObjectCfg(prim_path="{ENV_REGEX_NS}/WallTop")
+
+    
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        # TODO: replace with your real track bounds
+        xmin, xmax, ymin, ymax = -5.0, 5.0, -5.0, 5.0
+
+        # tunables
+        wall_height: float = 0.8
+        wall_thickness: float = 0.2
+        wall_margin: float = 0.0
+
+        m = wall_margin
+        t = wall_thickness
+        h = wall_height
+
+        x_len = (xmax - xmin) + 2.0 * m
+        y_len = (ymax - ymin) + 2.0 * m
+        cx = 0.5 * (xmin + xmax)
+        cy = 0.5 * (ymin + ymax)
+        zc = 0.5 * h
+
+        # Assign fully-defined configs (now the scene can spawn them)
+        self.wall_left = make_wall("{ENV_REGEX_NS}/WallLeft",   (t, y_len + t, h), (xmin - m - 0.5*t, cy, zc))
+        self.wall_right = make_wall("{ENV_REGEX_NS}/WallRight", (t, y_len + t, h), (xmax + m + 0.5*t, cy, zc))
+        self.wall_bottom = make_wall("{ENV_REGEX_NS}/WallBottom", (x_len + t, t, h), (cx, ymin - m - 0.5*t, zc))
+        self.wall_top = make_wall("{ENV_REGEX_NS}/WallTop",       (x_len + t, t, h), (cx, ymax + m + 0.5*t, zc))
 
 ##
 # MDP settings
