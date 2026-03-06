@@ -20,7 +20,7 @@ from isaaclab.sensors import TiledCameraCfg
 from isaaclab.actuators import ImplicitActuatorCfg
 
 from . import mdp
-from car_training.tasks.manager_based.car_training.mdp.rewards import reset_agent_distance_reward, get_terminal_bonus, heading_alignment_reward, reset_agent_velocity_reward, turning_penalty
+from car_training.tasks.manager_based.car_training.mdp.rewards import reset_agent_distance_reward, get_terminal_bonus, heading_alignment_reward, reset_agent_velocity_reward, turning_penalty, combined_heading_distance_reward
 from car_training.tasks.manager_based.car_training.mdp.observation import get_reset_agent_observation
 from car_training.tasks.manager_based.car_training.mdp.termination import out_of_view_termination, reached_goal_termination
 from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSteerAckermannAction
@@ -232,38 +232,38 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.DomeLightCfg(color=(0.9, 0.9, 0.9), intensity=500.0),
     )
 
-    wall_left: RigidObjectCfg = RigidObjectCfg(prim_path="{ENV_REGEX_NS}/WallLeft")
-    wall_right: RigidObjectCfg = RigidObjectCfg(prim_path="{ENV_REGEX_NS}/WallRight")
-    wall_bottom: RigidObjectCfg = RigidObjectCfg(prim_path="{ENV_REGEX_NS}/WallBottom")
-    wall_top: RigidObjectCfg = RigidObjectCfg(prim_path="{ENV_REGEX_NS}/WallTop")
+    # wall_left: RigidObjectCfg = RigidObjectCfg(prim_path="{ENV_REGEX_NS}/WallLeft")
+    # wall_right: RigidObjectCfg = RigidObjectCfg(prim_path="{ENV_REGEX_NS}/WallRight")
+    # wall_bottom: RigidObjectCfg = RigidObjectCfg(prim_path="{ENV_REGEX_NS}/WallBottom")
+    # wall_top: RigidObjectCfg = RigidObjectCfg(prim_path="{ENV_REGEX_NS}/WallTop")
 
     
 
-    def __post_init__(self):
-        super().__post_init__()
+    # def __post_init__(self):
+    #     super().__post_init__()
 
-        xmin, xmax, ymin, ymax = -5.0, 5.0, -5.0, 5.0
+    #     xmin, xmax, ymin, ymax = -5.0, 5.0, -5.0, 5.0
 
-        # tunables
-        wall_height: float = 0.8
-        wall_thickness: float = 0.2
-        wall_margin: float = 0.0
+    #     # tunables
+    #     wall_height: float = 0.8
+    #     wall_thickness: float = 0.2
+    #     wall_margin: float = 0.0
 
-        m = wall_margin
-        t = wall_thickness
-        h = wall_height
+    #     m = wall_margin
+    #     t = wall_thickness
+    #     h = wall_height
 
-        x_len = (xmax - xmin) + 2.0 * m
-        y_len = (ymax - ymin) + 2.0 * m
-        cx = 0.5 * (xmin + xmax)
-        cy = 0.5 * (ymin + ymax)
-        zc = 0.5 * h
+    #     x_len = (xmax - xmin) + 2.0 * m
+    #     y_len = (ymax - ymin) + 2.0 * m
+    #     cx = 0.5 * (xmin + xmax)
+    #     cy = 0.5 * (ymin + ymax)
+    #     zc = 0.5 * h
 
-        # Assign fully-defined configs (now the scene can spawn them)
-        self.wall_left = make_wall("{ENV_REGEX_NS}/WallLeft",   (t, y_len + t, h), (xmin - m - 0.5*t, cy, zc))
-        self.wall_right = make_wall("{ENV_REGEX_NS}/WallRight", (t, y_len + t, h), (xmax + m + 0.5*t, cy, zc))
-        self.wall_bottom = make_wall("{ENV_REGEX_NS}/WallBottom", (x_len + t, t, h), (cx, ymin - m - 0.5*t, zc))
-        self.wall_top = make_wall("{ENV_REGEX_NS}/WallTop",       (x_len + t, t, h), (cx, ymax + m + 0.5*t, zc))
+    #     # Assign fully-defined configs (now the scene can spawn them)
+    #     self.wall_left = make_wall("{ENV_REGEX_NS}/WallLeft",   (t, y_len + t, h), (xmin - m - 0.5*t, cy, zc))
+    #     self.wall_right = make_wall("{ENV_REGEX_NS}/WallRight", (t, y_len + t, h), (xmax + m + 0.5*t, cy, zc))
+    #     self.wall_bottom = make_wall("{ENV_REGEX_NS}/WallBottom", (x_len + t, t, h), (cx, ymin - m - 0.5*t, zc))
+    #     self.wall_top = make_wall("{ENV_REGEX_NS}/WallTop",       (x_len + t, t, h), (cx, ymax + m + 0.5*t, zc))
 
 ##
 # MDP settings
@@ -304,6 +304,8 @@ class EventCfg:
 
     # reset
     reset_robot_position = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
+
+    # reset_previous_observation = EventTerm(func=lambda env: setattr(env.unwrapped, "previous_observation", None), mode="reset")
     # reset_destination = EventTerm(func=reset_destination_pos, mode="reset")
 
 @configclass
@@ -311,10 +313,10 @@ class RewardsCfg:
     """Reward terms for the MDP."""
 
     # Get total reward from mdp.rewards.get_total_reward
-    distance_reward = RewTerm(
-        func=reset_agent_distance_reward,
-        weight=3.0,
-    )
+    # distance_reward = RewTerm(
+    #     func=reset_agent_distance_reward,
+    #     weight=3.0,
+    # )
 
     terminal_bonus = RewTerm(
         func=get_terminal_bonus,
@@ -322,10 +324,15 @@ class RewardsCfg:
         weight=5.0,
     )
 
-    heading_alignment_rew = RewTerm(
-        func=heading_alignment_reward,
-        weight=1.0,
+    combined_heading_distance_reward_term = RewTerm(
+        func=combined_heading_distance_reward,
+        weight=3.0,
     )
+
+    # heading_alignment_rew = RewTerm(
+    #     func=heading_alignment_reward,
+    #     weight=1.0,
+    # )
 
     velocity_reward_term = RewTerm(
         func=reset_agent_velocity_reward,

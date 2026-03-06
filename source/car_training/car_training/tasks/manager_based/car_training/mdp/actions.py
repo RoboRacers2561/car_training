@@ -29,7 +29,7 @@ THROTTLE_SCALE = 20
 STEER_SCALE = 1.0
 MAX_STEER = 0.6  # rad
 MAX_THROTTLE = 30
-MIN_THROTTLE = 0
+MIN_THROTTLE = -15
 
 def ackermann_to_wheel_angles(delta_center: torch.Tensor,
                              wheelbase: float,

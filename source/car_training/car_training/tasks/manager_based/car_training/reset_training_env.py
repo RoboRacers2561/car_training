@@ -62,6 +62,8 @@ class CarResetEnv(ManagerBasedRLEnv):
         self.goal_hold_time_s = 5
         self.goal_hold_steps_required = int(round(self.goal_hold_time_s / self.step_dt))
 
+        self.previous_observation = None # to keep track of the previous observation for each env.
+
     def reset(self, seed = None, env_ids = None, options = None) -> tuple[dict[str, torch.Tensor], dict]:
         """
         This is the reset method for the CarTrainingEnv class. This method is called only once at the beginning 

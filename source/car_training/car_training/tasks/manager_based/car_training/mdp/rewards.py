@@ -287,6 +287,28 @@ def reset_agent_distance_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
 
     return distance_reward
 
+def combined_heading_distance_reward(env: ManagerBasedRLEnv) -> torch.Tensor: 
+    """
+    Combined reward for the reset agent that takes into account both distance to the destination and heading alignment.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+
+    :return: Combined reward for the reset agent.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+    logger.debug("Calculating combined heading and distance reward...")
+
+    distance_reward = reset_agent_distance_reward(env)
+    heading_reward = heading_alignment_reward(env)
+
+    combined_reward = distance_reward * heading_reward
+
+    logger.debug_lazy("Combined reward: %s", lambda: combined_reward)
+
+    return combined_reward
+
 def get_terminal_bonus(env: ManagerBasedRLEnv, bonus: float) -> torch.Tensor:
     """
     Bonus reward given at the end of an episode, for example when the agent reaches the goal.
@@ -333,6 +355,9 @@ def heading_alignment_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
 
     # Take dot product of the two vectors
     alignment = F.cosine_similarity(heading_vec, direction_to_goal, dim=1)  # (N,)
+
+    # normalize the alignment to be between 0 and 1 instead of -1 and 1
+    alignment = 0.5 * (alignment + 1.0)
 
     logger.debug_lazy("Heading vectors: %s", lambda: heading_vec)
     logger.debug_lazy("Direction to goal vectors: %s", lambda: direction_to_goal)
