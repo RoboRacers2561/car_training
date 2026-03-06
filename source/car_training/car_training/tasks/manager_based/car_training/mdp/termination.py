@@ -77,11 +77,23 @@ def reached_goal_termination(env: ManagerBasedRLEnv) -> torch.Tensor:
     # Check if agent reached the goal (within threshold distance)
     distance_to_goal = torch.norm(robot_pos - destination_pos, dim=1)  # (N,)
     goal_threshold = env.unwrapped.goal_distance_threshold
-    reached_goal_flags = distance_to_goal < goal_threshold
+    inside_goal = distance_to_goal < goal_threshold
+
+    # increment/reset consecutive hold counter
+    env.unwrapped.goal_hold_steps = torch.where(
+        inside_goal,
+        env.unwrapped.goal_hold_steps + 1,
+        torch.zeros_like(env.unwrapped.goal_hold_steps),
+    )
+
+    reached_goal_flags = (
+        env.unwrapped.goal_hold_steps >= env.unwrapped.goal_hold_steps_required
+    )
+
+    env.unwrapped.reached_goal_flags = reached_goal_flags # store this in the env for use in rewards and logging
 
     env_ids_reached_goal = torch.where(reached_goal_flags)[0]
 
-    env.unwrapped.reached_goal_flags = reached_goal_flags # store this in the env for use in rewards and logging
     
     reset_destination_pos(env, env_ids_reached_goal) # reset the destination for the envs that reached the goal so that they can continue training towards the next destination in the same episode
     

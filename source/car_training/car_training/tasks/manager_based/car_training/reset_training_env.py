@@ -58,6 +58,10 @@ class CarResetEnv(ManagerBasedRLEnv):
         self.previous_distance_to_goal = torch.zeros(self.num_envs, device=self.device) # to keep track of the previous distance to goal for each env, used in reward calculation
         self.skip_distance_reward_next = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device) # flag to indicate whether to skip distance reward for the next step for each env, used to avoid giving distance reward on the same step as reaching the goal
 
+        self.goal_hold_steps = torch.zeros(self.num_envs, device=self.device, dtype=torch.long) # to keep track of how many consecutive steps each env has been holding at the goal, used for termination
+        self.goal_hold_time_s = 5
+        self.goal_hold_steps_required = int(round(self.goal_hold_time_s / self.step_dt))
+
     def reset(self, seed = None, env_ids = None, options = None) -> tuple[dict[str, torch.Tensor], dict]:
         """
         This is the reset method for the CarTrainingEnv class. This method is called only once at the beginning 

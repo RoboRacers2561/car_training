@@ -204,7 +204,7 @@ def make_wall(prim_path: str, size_xyz, pos_xyz) -> RigidObjectCfg:
                 disable_gravity=True,
             ),
             # optional visual
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.2, 0.2, 0.2)),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 1.0, 0.0)),
         ),
         init_state=RigidObjectCfg.InitialStateCfg(pos=pos_xyz),
     )
@@ -242,7 +242,6 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
     def __post_init__(self):
         super().__post_init__()
 
-        # TODO: replace with your real track bounds
         xmin, xmax, ymin, ymax = -5.0, 5.0, -5.0, 5.0
 
         # tunables
