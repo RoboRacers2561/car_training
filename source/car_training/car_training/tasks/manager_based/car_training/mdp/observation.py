@@ -224,8 +224,114 @@ def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEnt
     # print(f"track neighborhood image shape: {gray_crops.shape}")
 
     #save debug image
-    # debug_img = gray_crops[0, 0].cpu().numpy() * 255
-    # cv2.imwrite("debug_track_neighborhood_image.png", debug_img)
+    debug_img = gray_crops[0, 0].cpu().numpy() * 255
+    cv2.imwrite("debug_track_neighborhood_image.png", debug_img)
+
+    return gray_crops
+
+def aligned_robot_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, camera_name: str = "overhead_camera") -> torch.Tensor:
+    """
+    Find aligned image of robots in frame.
+    
+    :param env: The environment instance containing the robot and track information.
+    :type env: ManagerBasedRLEnv
+    :param asset_cfg: The configuration of the car asset, used to identify the robot's position and heading.
+    :type asset_cfg: SceneEntityCfg
+    :param camera_name: The name of the camera to use for capturing the image.
+    :type camera_name: str
+    :return: Aligned grayscale images of shape (N, 1, crop, crop) centered on the robot and rotated to align with its heading.
+    :rtype: Tensor
+    """
+    logger = get_logger(env)
+
+    # TODO: change to using overhead camera instead of static track image
+    if hasattr(env.unwrapped, 'static_track_image') and env.unwrapped.static_track_image is not None:
+        pass
+    else:
+        # return a dummy image if static image is not available
+        num_envs = env.unwrapped.num_envs
+        logger.warning("static track image not found, returning dummy gray image")
+        return torch.zeros((num_envs, 1, CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), device=env.unwrapped.device, dtype=torch.float32)
+
+    imgs = env.scene[camera_name].data.output["rgb"]  # (num_envs, H, W, 3)
+
+    device = env.unwrapped.device
+
+    #imgs = env.unwrapped.static_track_image
+    N, H, W, _ = imgs.shape
+    logger.debug(f"Overhead camera image shape: number of envs={N}, H={H}, W={W}")
+
+    # Convert to float in [0, 1] and NCHW
+    if imgs.dtype != torch.float32:
+        imgs = imgs.float() / 255.0
+    imgs = imgs.permute(0, 3, 1, 2)  # (N, 3, H, W)
+    car_xy = robot_pos(env, asset_cfg, do_convert_coords=True)
+    logger.debug_lazy("Car positions (image coords): %s", lambda: car_xy)
+
+    # Normalize to [-1, 1] for grid_sample
+    cx = 2.0 * car_xy[:, 0] / (W - 1) - 1.0
+    cy = 2.0 * car_xy[:, 1] / (H - 1) - 1.0
+
+    lin = torch.linspace(-1, 1, CROPPED_IMAGE_SIZE, device=device)
+    dy, dx = torch.meshgrid(lin, lin, indexing="ij")
+
+    # Scale offsets to image size
+    dx = dx[None] * (CROPPED_IMAGE_SIZE / W)
+    dy = dy[None] * (CROPPED_IMAGE_SIZE / H)
+    logger.debug(f"Crop offsets dx shape: {dx.shape}, dy shape: {dy.shape}")
+
+    # Shift grid to each car center
+    grid = torch.stack(
+        (
+            cx[:, None, None] + dx,
+            cy[:, None, None] + dy,
+        ),
+        dim=-1,
+    )  # (N, crop, crop, 2)
+
+    # Get car headings and compute rotation angles
+    headings = asset_heading = robot_heading(env, asset_cfg)  # (N, 2)
+    angles = torch.atan2(-headings[:, 0], headings[:, 1]) + torch.pi  # (N,) Negative x to match image coords
+
+    cos = torch.cos(angles).view(-1, 1, 1, 1)  # (N,1,1,1)
+    sin = torch.sin(angles).view(-1, 1, 1, 1)  # (N,1,1,1)
+
+    center = torch.stack((cx, cy), dim=-1).view(-1, 1, 1, 2)  # (N,1,1,2)
+    rel = grid - center  # (N,H,W,2)
+    rel_x = rel[..., 0:1]
+    rel_y = rel[..., 1:2]
+
+    rot_x = cos * rel_x - sin * rel_y
+    rot_y = sin * rel_x + cos * rel_y
+
+    grid = torch.cat((rot_x, rot_y), dim=-1) + center  # (N,H,W,2)
+
+    # Sample with border padding
+    crops = F.grid_sample(
+        imgs,
+        grid,
+        mode="bilinear",
+        padding_mode="border",
+        align_corners=True,
+    )  # (N, 3, crop, crop)
+
+    # Convert to grayscale
+    gray_crops = 0.2989 * crops[:, 0:1, :, :] + 0.5870 * crops[:, 1:2, :, :] + 0.1140 * crops[:, 2:3, :, :]  # (N, 1, crop, crop)
+
+    gray_crops = (gray_crops > 0.5).float()
+    # log the shape of gray crops
+
+    logger.debug("Obtained overhead camera neighborhood images.")
+    logger.debug_lazy("Overhead camera neighborhood image shape: %s", lambda: list(gray_crops.shape))
+
+    logger.debug_lazy("Overhead camera neighborhood image min/max: %s", lambda: list((gray_crops.min().item(), gray_crops.max().item())))
+
+    # print image shape for debugging
+    # print(f"track neighborhood image shape: {gray_crops.shape}")
+
+    #save debug image
+    debug_img = gray_crops[0, 0].cpu().numpy() * 255
+    cv2.imwrite("debug_overhead_camera_neighborhood_image.png", debug_img)
 
     return gray_crops
 
