@@ -359,9 +359,6 @@ def get_reset_agent_observation(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCf
     #         # draw direction to goal
     #         direction_vector = (int(direction_to_goal[env_index, 0].item() * 10), int(direction_to_goal[env_index, 1].item() * 10))
     #         cv2.arrowedLine(env_image, pos_coords, (pos_coords[0] + direction_vector[0], pos_coords[1] + direction_vector[1]), color=(255, 255, 0), thickness=2) # cyan for direction to goal
-
-    #         # write direction angle to goal on the image
-    #         cv2.putText(env_image, f"{angle_between_heading_and_goal[env_index].item():.2f}", (pos_coords[0] + 10, pos_coords[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             
     #         # write distance to goal on the image
     #         cv2.putText(env_image, f"{distance_to_goal[env_index].item():.2f}", (pos_coords[0] + 10, pos_coords[1] + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)

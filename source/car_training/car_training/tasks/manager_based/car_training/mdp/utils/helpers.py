@@ -33,7 +33,7 @@ def find_track_points_from_image(image: np.ndarray, debug = False, image_name_sa
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     # Threshold (invert so line is white)
-    _, binary = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY_INV)
+    _, binary = cv2.threshold(gray, 160, 255, cv2.THRESH_BINARY_INV)
 
     # Optional: clean small noise
     kernel = np.ones((3,3), np.uint8)

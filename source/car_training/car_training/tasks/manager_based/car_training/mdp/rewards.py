@@ -29,7 +29,6 @@ from car_training.tasks.manager_based.car_training.mdp.observation import (
 from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import (
     GpuSafeLogger,
 )
-from car_training.tasks.manager_based.car_training.mdp.events import reset_destination_pos
 
 _LOGGER: Optional[GpuSafeLogger] = None
 
@@ -350,18 +349,19 @@ def heading_alignment_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     logger = get_logger(env)
     logger.debug("Calculating heading alignment reward...")
 
-    heading_vec = env.unwrapped.current_observation["heading"]  # (N, 2)
+    # since direction to goal is in the car's local frame, we take the dot product of it with vertical
     direction_to_goal = env.unwrapped.current_observation["direction_to_goal"]  # (N, 2)
+    vertical_vec = torch.tensor([0.0, -1.0], device=env.device)  # (2,) using [0, -1] because the camera vertical axis points negative
+    # print(f"Heading vec: {heading_vec}, Direction to goal: {direction_to_goal}")
 
     # Take dot product of the two vectors
-    alignment = F.cosine_similarity(heading_vec, direction_to_goal, dim=1)  # (N,)
+    alignment = F.cosine_similarity(direction_to_goal, vertical_vec.unsqueeze(0), dim=1)  # (N,)
 
     # normalize the alignment to be between 0 and 1 instead of -1 and 1
-    alignment = 0.5 * (alignment + 1.0)
+    # alignment = 0.5 * (alignment + 1.0)
 
-    logger.debug_lazy("Heading vectors: %s", lambda: heading_vec)
-    logger.debug_lazy("Direction to goal vectors: %s", lambda: direction_to_goal)
     logger.debug_lazy("Heading alignment reward: %s", lambda: alignment)
+    # print(f"Heading alignment reward: {alignment}")
 
     return alignment
 
