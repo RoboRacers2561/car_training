@@ -67,6 +67,26 @@ def robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor
     logger.debug_lazy("Car velocities: %s", lambda: relative_vel)
     return relative_vel
 
+def robot_speed(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, normalize: bool = False) -> torch.Tensor:
+    """
+    Calculate the speed of the car.
+
+    Args:
+        env: The environment instance.
+        asset_cfg: The configuration of the car asset.
+
+    Returns:
+        torch.Tensor: The speed of the car.
+    """
+    velocity = robot_vel(env, asset_cfg)  # (N, 2)
+    speed = torch.norm(velocity, dim=1)  # (N,)
+
+    if normalize:
+        max_speed = 0.8  # Assuming 20 m/s as a reasonable max speed for normalization
+        speed = speed / max_speed
+
+    return speed
+
 def robot_heading(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
 
     logger = get_logger(env)
@@ -102,31 +122,6 @@ def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, do_convert_coor
         relative_pos = convert_coords(relative_pos, track_size, (camera_width, camera_height))
         logger.debug_lazy("Car image positions: %s", lambda: relative_pos)
     return relative_pos[:, :2]  # Return x, y position
-
-def forward_speed(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
-    """
-    Calculate the forward speed of the car.
-
-    Args:
-        env: The environment instance.
-        asset_cfg: The configuration of the car asset.
-
-    Returns:
-        torch.Tensor: The forward speed of the car.
-    """
-    logger = get_logger(env)
-    asset: RigidObject = env.scene[asset_cfg.name]
-
-    heading = asset.data.heading_w  # (num_envs,)
-    lin_vel = asset.data.root_com_lin_vel_w  # (num_envs, 3)
-
-    heading_vector = torch.stack((torch.cos(heading), torch.sin(heading), torch.zeros_like(heading)), dim=-1)  # (num_envs, 3)
-
-    forward_speed = torch.sum(lin_vel * heading_vector, dim=-1)  # (num_envs,)
-    logger.debug_lazy("Car forward speeds: %s", lambda: forward_speed)
-    # print speed of env 0 for debugging
-    print(f"Car forward speed env 0: {forward_speed[0].item()}")
-    return forward_speed
 
 
 
@@ -306,8 +301,7 @@ def get_reset_agent_observation(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCf
     heading = robot_heading(env, asset_cfg)  # (N, 2)
     heading_angle_to_vertical = -torch.atan2(heading[:, 0], -heading[:, 1]) 
     
-    velocity = robot_vel(env, asset_cfg)  # (N, 2)
-    speed = torch.norm(velocity, dim=1)  # (N,)
+    speed = robot_speed(env, asset_cfg, normalize=True)  # (N,)
 
     if not hasattr(env.unwrapped, 'destination_pos'):
         destination = torch.zeros((env.unwrapped.num_envs, 2), device=pos.device)  # (N, 2)
@@ -400,7 +394,6 @@ def get_reset_agent_observation(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCf
     env.unwrapped.current_observation = {
         "pos": pos.clone(),
         "heading": heading.clone(),
-        "velocity": velocity.clone(),
         "speed": speed.clone(),
         "destination": destination.clone(),
         "distance_to_goal": distance_to_goal.clone(),

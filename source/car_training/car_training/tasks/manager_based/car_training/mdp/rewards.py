@@ -312,7 +312,7 @@ def heading_alignment_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
 
     return alignment
 
-def reset_agent_velocity_reward(env: ManagerBasedRLEnv, max_speed: float, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+def reset_agent_velocity_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     """
     Reward for the reset agent based on its velocity, encouraging it to move towards the goal.
 
@@ -329,14 +329,12 @@ def reset_agent_velocity_reward(env: ManagerBasedRLEnv, max_speed: float, asset_
     logger = get_logger(env)
     logger.debug("Calculating reset agent velocity reward...")
 
-    car_vels = robot_vel(env, asset_cfg)
-
-    # Reward is based on speed, normalized by max speed
-    car_speeds = torch.norm(car_vels, dim=1)  # (N,)
+    # Assuming speed is normalized in observation
+    car_speeds = env.unwrapped.current_observation["speed"]  # (N,)
 
     # if inside goal, make velocity reward so that higher vel gives negative rewrad to encourage the agent to slow down once it reaches the goal
     inside_goal_flags = env.unwrapped.inside_goal_flags  # (N,), this is set in the termination function and stored in the env
-    velocity_reward = torch.where(inside_goal_flags, -car_speeds / max_speed, car_speeds / max_speed)
+    velocity_reward = torch.where(inside_goal_flags, -car_speeds, car_speeds)
 
     return velocity_reward
 

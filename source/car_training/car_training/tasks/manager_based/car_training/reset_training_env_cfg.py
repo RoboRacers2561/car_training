@@ -352,7 +352,6 @@ class RewardsCfg:
 
     velocity_reward_term = RewTerm(
         func=reset_agent_velocity_reward,
-        params={"max_speed": 0.8, "asset_cfg": SceneEntityCfg("robot"),},
         weight=0.5,
     )
 
