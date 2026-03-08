@@ -29,6 +29,8 @@ parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
 parser.add_argument("--max_iterations", type=int, default=None, help="RL Policy training iterations.")
 parser.add_argument("--debug", action="store_true", default=False, help="Enable debug mode which will enable debug log level on internals.")
+parser.add_argument("--checkpoint", type=str, default=None, help="Path to model checkpoint.")
+
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -78,91 +80,9 @@ import isaaclab_tasks  # noqa: F401
 import car_training.tasks  # noqa: F401
 from isaaclab_tasks.utils.hydra import hydra_task_config
 
+from car_training.tasks.manager_based.car_training.agents.feature_extractor import CustomMultiInputExtractor
 import logging
 
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
-
-class ResidualBlock(nn.Module):
-    def __init__(self, channels):
-        super().__init__()
-        self.conv1 = nn.Conv2d(channels, channels, kernel_size=3, padding=1)
-        self.bn1 = nn.BatchNorm2d(channels)
-        self.conv2 = nn.Conv2d(channels, channels, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm2d(channels)
-
-    def forward(self, x):
-        identity = x
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = self.bn2(self.conv2(out))
-        out += identity   # skip connection
-        return F.relu(out)
-
-class CustomMultiInputExtractor(BaseFeaturesExtractor):
-    def __init__(self, observation_space, features_dim=128):
-        super().__init__(observation_space, features_dim)
-
-        image_space = observation_space.spaces["image"]
-        vel_space = observation_space.spaces["joint_vel_rel"]
-
-        # --- CNN with residual blocks ---
-        self.cnn = nn.Sequential(
-            nn.Conv2d(in_channels=image_space.shape[0], out_channels=16, kernel_size=5, stride=2, padding=2),
-            nn.BatchNorm2d(16),
-            nn.ReLU(),
-            ResidualBlock(16),
-
-            nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            ResidualBlock(32),
-
-            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            ResidualBlock(32),
-
-            nn.Flatten(),
-        )
-
-        # Compute CNN output size dynamically
-        with torch.no_grad():
-            sample_input = torch.zeros(1, *image_space.shape)
-            n_flatten = self.cnn(sample_input).shape[1]
-            print(f"CNN output size: {n_flatten}")
-            print(f"image shape: {image_space.shape}")
-
-        self.image_fc = nn.Sequential(
-            nn.Linear(n_flatten, 128),
-            nn.ReLU(),
-        )
-
-        # --- Velocity branch ---
-        self.vel_fc = nn.Sequential(
-            nn.Linear(vel_space.shape[0], 32),
-            nn.ReLU(),
-        )
-
-        # --- Fusion ---
-        self.fc = nn.Sequential(
-            nn.Linear(128 + 32, 128),
-            nn.ReLU(),
-            nn.Linear(128, features_dim),
-        )
-
-    def forward(self, observations):
-        img = observations["image"]
-        vel = observations["joint_vel_rel"]
-
-        img_features = self.image_fc(self.cnn(img))
-        vel_features = self.vel_fc(vel)
-
-        fused = torch.cat([img_features, vel_features], dim=1)
-        return self.fc(fused)
-    
 def _free_port():
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
@@ -279,7 +199,13 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         )
 
     # create agent from stable baselines
-    agent = PPO(policy_arch, env, verbose=1, **agent_cfg)
+    if args_cli.checkpoint is None:
+        print("[INFO] No checkpoint provided. Training from scratch.")
+        agent = PPO(policy_arch, env, verbose=1, **agent_cfg)
+    else:
+        print(f"[INFO] Loading checkpoint from: {args_cli.checkpoint}")
+        agent = PPO.load(args_cli.checkpoint, env, print_system_info=True)
+
     # configure the logger
     new_logger = configure(log_dir, ["stdout", "tensorboard"])
     agent.set_logger(new_logger)

@@ -25,8 +25,6 @@ TTR_NANO_FRONT_WHEEL_NAMES = ["move_FL", "move_FR"]
 TTR_NANO_FRONT_STEER_NAMES = ["turn_L", "turn_R"]
 
 
-THROTTLE_SCALE = 20
-STEER_SCALE = 1.0
 MAX_STEER = 0.6  # rad
 MAX_THROTTLE = 30
 MIN_THROTTLE = -15
@@ -80,14 +78,8 @@ class ThrottleSteerAckermannAction(ActionTerm):
         self.rear_ids, _ = self.robot.find_joints(REAR_WHEEL_NAMES)
         self.front_ids, _ = self.robot.find_joints(FRONT_STEER_NAMES)
 
-        # scaling / limits
-        self.throttle_scale = THROTTLE_SCALE
-        self.steer_scale = STEER_SCALE
-        self.max_steer = MAX_STEER
-
         self.logger.debug(f"Rear wheel joint IDs: {self.rear_ids}")
         self.logger.debug(f"Front steer joint IDs: {self.front_ids}")
-        self.logger.debug(f"Throttle scale: {self.throttle_scale}, Steer scale: {self.steer_scale}, Max steer: {self.max_steer}")
 
         # Isaac Lab expects action dim known
         self._action_dim = 2
@@ -103,6 +95,8 @@ class ThrottleSteerAckermannAction(ActionTerm):
             device=env.device
         )
         self.buffer_count = torch.zeros(env.num_envs, dtype=torch.long, device=env.device)
+
+        self.max_steer = MAX_STEER
         
 
     @property
@@ -156,11 +150,10 @@ class ThrottleSteerAckermannAction(ActionTerm):
 
         # Map throttle from [-1, 1] → [0, 1]
         throttle_norm = 0.5 * (actions[:, 0] + 1.0)
-        throttle = actions[:, 0] * self.throttle_scale
         throttle = MIN_THROTTLE + throttle_norm * (MAX_THROTTLE - MIN_THROTTLE)
         self.logger.debug_lazy("Processed throttle commands: %s", lambda: throttle)
 
-        steer = MAX_STEER * actions[:, 1] * self.steer_scale
+        steer = MAX_STEER * actions[:, 1]
         self.logger.debug_lazy("Processed steer commands: %s", lambda: steer)
         
         # store as (num_envs, 2) again, but now processed

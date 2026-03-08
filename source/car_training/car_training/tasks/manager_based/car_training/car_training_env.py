@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 import torch
+from torch.nn.utils.rnn import pad_sequence
 from pathlib import Path
 
 PORJECT_ROOT = Path(__file__).resolve().parents[8]
@@ -38,6 +39,7 @@ class CarTrainingEnv(ManagerBasedRLEnv):
         self._static_track_inited = False
         self.static_track_image = None # will be initialized on first reset
         self.track_points = [] # will be initialized on first reset
+        self.track_points_tensor = torch.empty((self.num_envs, 0, 2), device=self.device) # tensor version of track points for easier processing in rewards and termination, to be filled after reset
 
         self.track_points_world = [] # track points in world coordinates, to be filled after reset
 
@@ -116,6 +118,12 @@ class CarTrainingEnv(ManagerBasedRLEnv):
                 # convert to world coordinates
                 world_points = convert_coords_list(track_points, track_dimensions, (camera_width, camera_height), image_to_isaaclab=True)
                 self.track_points_world.append(world_points)
+            
+            seqs = [torch.as_tensor(tp, device=self.device, dtype=torch.float32) for tp in self.track_points]
+            self.track_points_tensor = pad_sequence(seqs, batch_first=True, padding_value=0.0)
+            self.track_points_lengths = torch.tensor([len(tp) for tp in self.track_points], device=self.device)
+            self.logger.info("Track points initialized from static track image.")
+            
 
     def get_camera_dimensions(self) -> tuple[int, int]:
         """

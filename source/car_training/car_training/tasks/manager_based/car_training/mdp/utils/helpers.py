@@ -16,7 +16,6 @@ if not os.path.exists(TEST_DATA_PATH):
 
 logger = logging.getLogger("car_training" + __name__.rpartition(".car_training")[-1])
 
-MAX_DISTANCE_FROM_LINE = 45
 
 def find_track_points_from_image(image: np.ndarray, debug = False, image_name_save: str = "debug_track_points.png"):
     """
@@ -70,137 +69,40 @@ def find_track_points_from_image(image: np.ndarray, debug = False, image_name_sa
 
     return track_points
 
-
-# TODO: This reward is not being used right now!
-def track_completion_reward(completed_laps: int, total_laps: int, weight=1.0):
+def find_closest_track_points(
+    car_centers: torch.Tensor,        # (N, 2)
+    track_padded: torch.Tensor,        # (N, T, 2)
+    lengths: torch.Tensor              # (N,)
+) -> torch.Tensor:
     """
-    Calculate reward based on the completion of laps.
+    For each environment, find the closest track point to its car center.
 
-    :param completed_laps: Number of laps completed by the car.
-    :type completed_laps: int
-    :param total_laps: Total number of laps in the race.
-    :type total_laps: int
-    :param weight: Weight for the reward.
-    :type weight: float
-    :return: Reward based on the completion of laps.
-    :rtype: float
+    :param car_centers: Tensor of shape (N, 2) containing the (x, y) coordinates of the car centers for N environments.
+    :type car_centers: torch.Tensor
+    :param track_padded: Tensor of shape (N, T, 2) containing the padded track points for N environments, where T is the maximum number of track points across all environments.
+    :type track_padded: torch.Tensor
+    :param lengths: Tensor of shape (N,) containing the actual number of track points for each environment (before padding).
+    :type lengths: torch.Tensor
     """
-    if total_laps <= 0:
-        return 0.0  # Avoid division by zero
-    normalized_completion = completed_laps / total_laps
-    reward = normalized_completion * weight
-    return reward
-
-
-def distance_from_center_reward(car_center: tuple[float, float], track_points_list: list[tuple[float, float]], weight=1.0):
-    """
-    Calculate reward based on the car's distance from the center of the track.
-
-    :param car_center: Tuple representing the car's center coordinates (x, y).
-    :type car_center: tuple[float, float]
-    :param track_points_list: List of tuples representing the track points (x, y).
-    :type track_points_list: list[tuple[float, float]]
-    :param weight: Weight for the reward.
-    :type weight: float
-
-    :return: Reward based on the distance from the center of the track.
-    :rtype: float
     
-    """
-    closest_track_point = __find_closest_track_point(car_center, track_points_list)
-    distance = np.linalg.norm(np.array(car_center) - np.array(closest_track_point))
-    logger.debug(f"Distance from center: {distance}")
-    # print(f"Distance from center: {distance}")
-    # Assuming a maximum distance for normalization, e.g., the width of the track
-    max_distance = MAX_DISTANCE_FROM_LINE  # This should be defined based on the track's characteristics
-    normalized_distance = distance / max_distance
-    # Reward is higher when the distance is smaller
-    reward = 1.0 - normalized_distance
-    logger.debug(f"Distance from center reward before weight applied: {reward}")
-    return reward * weight
+    N, Tmax, _ = track_padded.shape
 
+    # (N, Tmax)
+    dist2 = torch.sum((track_padded - car_centers.unsqueeze(1))**2, dim=2)
 
-def __find_closest_track_point(car_center: tuple[float, float], track_points_list: list[tuple[float, float]]):
-    """
-    Find the closest track point to the car's center. If the track points list is empty, return (0.0, 0.0).
-    
-    :param car_center: Tuple representing the car's center coordinates (x, y).
-    :type car_center: tuple[float, float]
-    :param track_points_list: List of tuples representing the track points (x, y).
-    :type track_points_list: list[tuple[float, float]]
+    # mask padded indices
+    idxs = torch.arange(Tmax, device=track_padded.device).unsqueeze(0)  # (1, Tmax)
+    valid = idxs < lengths.unsqueeze(1)                                 # (N, Tmax)
 
-    :return: The closest track point to the car's center.
-    :rtype: tuple[float, float]
-    """
-    if len(track_points_list) == 0:
-        return (0.0, 0.0)  # Return a default value if the list is empty
+    dist2 = dist2.masked_fill(~valid, float("inf"))
 
-    distances = [np.linalg.norm(np.array(car_center) - np.array(point)) for point in track_points_list]
-    closest_index = np.argmin(distances)
-    return track_points_list[closest_index]
+    # (N,)
+    closest_idx = torch.argmin(dist2, dim=1)
 
-
-def velocity_reward(car_speed: float, max_speed: float, weight=1.0):
-    """
-    Calculates reward based on the car's speed relative to the maximum speed.
-
-    :param car_speed: Current speed of the car.
-    :type car_speed: float
-    :param max_speed: Maximum speed of the car.
-    :type max_speed: float
-    :param weight: Weight for the reward.
-    :type weight: float
-    """
-    normalized_speed = car_speed / max_speed
-    # Reward is higher when the speed is closer to the maximum speed
-    logger.debug("velocity reward before weight %s", normalized_speed)
-    reward = normalized_speed * weight
-    return reward
-
-
-def remains_alive_reward(weight=1.0):
-    """
-    Returns a constant reward for remaining alive.
-
-    :param weight: Weight for the reward.
-    :type weight: float
-
-    Returns:
-        float: Constant reward value.
-    """
-    reward = 1.0 * weight
-    return reward
-
-
-def leaves_track_penalty(car_center: tuple[float, float], track_points_list: list[tuple[float, float]], weight=1.0):
-    """
-    Calculate penalty if the car leaves the track.
-
-    :param car_center: Tuple representing the car's center coordinates (x, y).
-    :type car_center: tuple[float, float]
-    :param track_points_list: List of tuples representing the track points (x, y).
-    :type track_points_list: list[tuple[float, float]]
-    :param weight: Weight for the penalty.
-    :type weight: float
-
-    :return: Penalty value if the car leaves the track, otherwise 0.
-    :rtype: float
-    """
-    closest_track_point = __find_closest_track_point(car_center, track_points_list)
-    distance = np.linalg.norm(np.array(car_center) - np.array(closest_track_point))
-    logger.debug(f"Distance from center for leaves_track_penalty: {distance}")
-    # Assuming a threshold distance to determine if the car is off track
-    threshold_distance = 35.0  # This should be defined based on the track's characteristics
-    penalty = 0.0
-    if distance > threshold_distance:
-        logger.debug("Applying leaves track penalty")
-        penalty = 1.0 - (distance / MAX_DISTANCE_FROM_LINE) * weight  # Normalize the penalty
-        logger.debug(f"Leaves track penalty before max applied: {penalty}")
-        penalty = max(penalty, 0.0)  # Ensure penalty is not negative
-    else:
-        penalty = 0.0  # No penalty if the car is within the track limits
-    return penalty
-
+    # (N, 2)
+    batch = torch.arange(N, device=track_padded.device)
+    closest_pts = track_padded[batch, closest_idx]
+    return closest_pts
 
 def get_green_car_mask(image, debug=False):
     """
