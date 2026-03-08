@@ -16,7 +16,7 @@ import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 import numpy as np
 from isaaclab.assets import RigidObject
-from car_training.tasks.manager_based.car_training.mdp.utils.helpers import convert_coords, rotate_torch_image
+from car_training.tasks.manager_based.car_training.mdp.utils.helpers import convert_coords, find_closest_point
 from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import GpuSafeLogger
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
@@ -325,7 +325,18 @@ def get_reset_agent_observation(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCf
 
     angle_of_vec_to_goal_with_vertical = torch.atan2(direction_to_goal[:, 0], -direction_to_goal[:, 1])  # (N,)
 
-    observation = torch.cat((speed.unsqueeze(-1), distance_to_goal_normalized, direction_to_goal, angle_of_vec_to_goal_with_vertical.unsqueeze(-1)), dim=-1)  # (N, 2 + 2 + 2 + 2 + 1 + 2 + 1) = (N, 12)
+    if hasattr(env.unwrapped, 'yellow_walls_tensor') and env.unwrapped.yellow_walls_tensor.numel() > 0:
+        closest_yellow_wall_point = find_closest_point(pos, env.unwrapped.yellow_walls_tensor, env.unwrapped.yellow_walls_lengths)  # (N, 2)
+        vec_to_wall = closest_yellow_wall_point - pos  # (N, 2)
+        vec_to_wall = rotate_vector(vec_to_wall, heading_angle_to_vertical)
+        distance_to_wall = torch.norm(vec_to_wall, dim=1, keepdim=True)  # (N, 1)
+        distance_to_wall_normalized = distance_to_wall / torch.norm(torch.tensor([float(image_width), float(image_height)], device=distance_to_wall.device))  # (N, 1)
+        vec_to_wall_normalized = vec_to_wall / (torch.norm(vec_to_wall, dim=1, keepdim=True) + 1e-8)  # (N, 2)
+    else:
+        vec_to_wall_normalized = torch.zeros((pos.shape[0], 2), device=pos.device)  # (N, 2)
+        distance_to_wall_normalized = torch.zeros((pos.shape[0], 1), device=pos.device)  # (N, 1)
+    
+    observation = torch.cat((speed.unsqueeze(-1), distance_to_goal_normalized, direction_to_goal, angle_of_vec_to_goal_with_vertical.unsqueeze(-1), vec_to_wall_normalized, distance_to_wall_normalized), dim=-1)  # (N, 2 + 2 + 2 + 2 + 1 + 2 + 1) = (N, 12)
 
     logger.debug_lazy("Reset agent observation: %s", lambda: observation)
 
@@ -373,12 +384,17 @@ def get_reset_agent_observation(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCf
     #     direction_vector = (int(direction_to_goal[env_index, 0].item() * 10), int(direction_to_goal[env_index, 1].item() * 10))
     #     cv2.arrowedLine(debug_img, (256, 192), (256 + direction_vector[0], 192 + direction_vector[1]), color=(255, 0, 0), thickness=2) # blue for direction to goal
 
+    #     direction_vector_wall = (int(vec_to_wall_normalized[env_index, 0].item() * 10), int(vec_to_wall_normalized[env_index, 1].item() * 10))
+    #     cv2.arrowedLine(debug_img, (256, 192), (256 + direction_vector_wall[0], 192 + direction_vector_wall[1]), color=(0, 255, 0), thickness=2) # green for direction to wall
+
     #     # write speed on the image
     #     cv2.putText(debug_img, f"Speed: {observation[env_index, 0].item():.2f}", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
     #     # write distance to goal on the image
     #     cv2.putText(debug_img, f"Distance to goal: {observation[env_index, 1].item():.2f}", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
     #     # write angle to goal on the image
     #     cv2.putText(debug_img, f"Angle to goal: {observation[env_index, 4].item():.2f}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+    #     # write distance to wall on the image
+    #     cv2.putText(debug_img, f"Distance to wall: {distance_to_wall_normalized[env_index, 0].item():.2f}", (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
     #     cv2.imwrite(f"debug_reset_agent_observation_vec_to_goal_{env_index}.png", debug_img)
 
     env.unwrapped.current_observation = {
@@ -390,6 +406,7 @@ def get_reset_agent_observation(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCf
         "distance_to_goal": distance_to_goal.clone(),
         "distance_to_goal_normalized": distance_to_goal_normalized.clone(),
         "direction_to_goal": direction_to_goal.clone(),
+        "distance_to_wall_normalized": distance_to_wall_normalized.clone(),
         "angle_of_vec_to_goal_with_vertical": angle_of_vec_to_goal_with_vertical.clone(),
     }
     return observation

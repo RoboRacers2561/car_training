@@ -79,6 +79,8 @@ def reached_goal_termination(env: ManagerBasedRLEnv) -> torch.Tensor:
     goal_threshold = env.unwrapped.goal_distance_threshold
     inside_goal = distance_to_goal < goal_threshold
 
+    env.unwrapped.inside_goal_flags = inside_goal.clone() # store this in the env for use in rewards and logging
+
     # increment/reset consecutive hold counter
     env.unwrapped.goal_hold_steps = torch.where(
         inside_goal,

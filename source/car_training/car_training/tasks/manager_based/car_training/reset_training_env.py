@@ -4,6 +4,7 @@ import math
 from collections.abc import Sequence
 import torch
 from pathlib import Path
+from torch.nn.utils.rnn import pad_sequence
 import omni
 from pxr import UsdGeom, Gf
 import numpy as np
@@ -16,7 +17,7 @@ import logging
 import cv2
 from car_training.tasks.manager_based.car_training.car_training_env_cfg import OverheadCameraCfg
 from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image
-from car_training.tasks.manager_based.car_training.mdp.utils.helpers import find_track_points_from_image
+from car_training.tasks.manager_based.car_training.mdp.utils.helpers import find_track_points_from_image, find_yellow_walls_from_image
 from isaaclab.envs import ManagerBasedRLEnv
 from car_training.tasks.manager_based.car_training.reset_training_env_cfg import CarTrainingEnvCfg
 from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import setup_logger, GpuSafeLogger
@@ -64,6 +65,11 @@ class CarResetEnv(ManagerBasedRLEnv):
 
         self.previous_observation = None # to keep track of the previous observation for each env.
 
+        self.inside_goal_flags = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device) # to keep track of which envs are currently inside the goal region, used for rewards and logging
+
+        self.yellow_walls_tensor = torch.empty((self.num_envs, 0, 2), device=self.device) 
+        self.yellow_walls_lengths = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
+
     def reset(self, seed = None, env_ids = None, options = None) -> tuple[dict[str, torch.Tensor], dict]:
         """
         This is the reset method for the CarTrainingEnv class. This method is called only once at the beginning 
@@ -83,6 +89,7 @@ class CarResetEnv(ManagerBasedRLEnv):
         # We perform the usual reset plus an initialization of the static track image if needed
         self.__init_static_track_image_if_needed()
         self.__init_track_points_if_needed()
+        self.__init_yellow_walls_points()
         
         return obs, info
 
@@ -99,10 +106,14 @@ class CarResetEnv(ManagerBasedRLEnv):
             if self.enable_cameras:
                 self.static_track_image = init_static_track_image(self, camera_name="overhead_camera")
                 self._static_track_inited = True
+
+                # save static track image as a .pt file
+                # torch.save(self.static_track_image.cpu(), f"{ASSET_FOLDER}/scene_assets/reset_agent_static_track_image_12_env.pt")
+                
                 self.logger.info("Static track image initialized.")
             else:
                 # use torch.load to load pre-saved static track image
-                self.static_track_image: torch.Tensor = torch.load(f"{ASSET_FOLDER}/scene_assets/static_track_image_12_env.pt").to(self.device)
+                self.static_track_image: torch.Tensor = torch.load(f"{ASSET_FOLDER}/scene_assets/reset_agent_static_track_image_12_env.pt").to(self.device)
                 if self.num_envs <= self.static_track_image.shape[0]:
                     # only take into account the first N environments
                     self.static_track_image = self.static_track_image[:self.num_envs]
@@ -127,7 +138,7 @@ class CarResetEnv(ManagerBasedRLEnv):
         if len(self.track_points) == 0:
             for index in range(self.num_envs):
                 image_np = self.static_track_image[index].detach().cpu().numpy()
-                track_points = find_track_points_from_image(image_np, debug=index<=30, image_name_save=f"track_points_{index}.png")
+                track_points = find_track_points_from_image(image_np, debug=index<=30, image_idx=index)
                 self.track_points.append(track_points)
                 random_point_on_track = choose_rand_point(track_points)
                 self.destination_pos[index] = torch.tensor(random_point_on_track, device=self.device)
@@ -142,6 +153,20 @@ class CarResetEnv(ManagerBasedRLEnv):
             
             self.destination_pos_world = convert_coords_list(self.destination_pos.cpu().numpy(), track_dimensions, (camera_width, camera_height), image_to_isaaclab=True)
             self.set_goal_markers(self.destination_pos_world, yaw_deg_tensor=self.destination_yaw_deg) # set initial goal marker positions and orientations
+
+    def __init_yellow_walls_points(self) -> None:
+        yellow_walls_list = []
+        for index in range(self.num_envs):
+                image_np = self.static_track_image[index].detach().cpu().numpy()
+                # change to rgb
+                image_np = cv2.cvtColor(image_np.copy(), cv2.COLOR_BGR2RGB)
+                yellow_walls_points = find_yellow_walls_from_image(image_np, debug=index<=30, image_idx=index)
+                yellow_walls_list.append(yellow_walls_points)
+
+        seqs = [torch.as_tensor(tp, device=self.device, dtype=torch.float32) for tp in yellow_walls_list]
+        self.yellow_walls_tensor = pad_sequence(seqs, batch_first=True, padding_value=0.0)
+        self.yellow_walls_lengths = torch.tensor([len(tp) for tp in yellow_walls_list], device=self.device)
+        self.logger.info("Yellow walls points initialized from static track image.")
 
     def ensure_goal_markers(self, num_envs: int, radius: float = 0.1):
         """

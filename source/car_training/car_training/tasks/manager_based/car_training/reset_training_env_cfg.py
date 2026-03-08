@@ -204,7 +204,7 @@ def make_wall(prim_path: str, size_xyz, pos_xyz) -> RigidObjectCfg:
                 disable_gravity=True,
             ),
             # optional visual
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 1.0, 1.0)),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 1.0, 0.0)),
         ),
         init_state=RigidObjectCfg.InitialStateCfg(pos=pos_xyz),
     )
@@ -246,7 +246,7 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
 
         # tunables
         wall_height: float = 0.8
-        wall_thickness: float = 0.2
+        wall_thickness: float = 0.02
         wall_margin: float = 0.0
 
         m = wall_margin
@@ -303,7 +303,7 @@ class EventCfg:
     """Configuration for events."""
 
     # reset
-    reset_robot_position = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
+    # reset_robot_position = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
     # reset_robot_position = EventTerm(
     #     func=reset_robot_root_random,
@@ -317,23 +317,13 @@ class EventCfg:
     #     },
     # )
 
-    # reset_robot_position = EventTerm(
-    #     func=reset_robot_root_pose,
-    #     mode="reset",
-    #     params={
-    #         "asset_cfg": SceneEntityCfg("robot"),
-    #         "position": (-3.0, 0.0, 0.05),
-    #         "yaw": 0.0,
-    #     },
-    # )
-
-    # reset_robot_position = EventTerm(
-    #     func=reset_robot_root_random_deterministic_mix,
-    #     mode="reset",
-    #     params={
-    #         "asset_cfg": SceneEntityCfg("robot"),
-    #     }
-    # )
+    reset_robot_position = EventTerm(
+        func=reset_robot_root_random_deterministic_mix,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot"),
+        }
+    )
 @configclass
 class RewardsCfg:
     """Reward terms for the MDP."""
@@ -383,7 +373,7 @@ class TerminationsCfg:
     
     out_of_view_term = DoneTerm(func=out_of_view_termination,
                              params={"asset_cfg": SceneEntityCfg("robot"),},)
-    
+        
     time_out_term = DoneTerm(func=mdp.time_out)
 
 

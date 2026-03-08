@@ -20,7 +20,7 @@ import cv2
 import logging
 import torch.nn.functional as F
 
-from car_training.tasks.manager_based.car_training.mdp.utils.helpers import find_closest_track_points
+from car_training.tasks.manager_based.car_training.mdp.utils.helpers import find_closest_point
 from car_training.tasks.manager_based.car_training.mdp.observation import (
     robot_pos,
     aligned_robot_vel,
@@ -70,7 +70,7 @@ def distance_from_center_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCf
     track_points = env.track_points_tensor  # (num_envs, num_track_points, 2)
     track_points_lengths = env.track_points_lengths  # (num_envs,)
 
-    closest_track_points = find_closest_track_points(car_centers, track_points, track_points_lengths)  # (num_envs, 2)
+    closest_track_points = find_closest_point(car_centers, track_points, track_points_lengths)  # (num_envs, 2)
     distances = torch.norm(car_centers - closest_track_points, dim=1)  #
 
     max_distance = MAX_DISTANCE_FROM_LINE
@@ -333,7 +333,10 @@ def reset_agent_velocity_reward(env: ManagerBasedRLEnv, max_speed: float, asset_
 
     # Reward is based on speed, normalized by max speed
     car_speeds = torch.norm(car_vels, dim=1)  # (N,)
-    velocity_reward = car_speeds / max_speed
+
+    # if inside goal, make velocity reward so that higher vel gives negative rewrad to encourage the agent to slow down once it reaches the goal
+    inside_goal_flags = env.unwrapped.inside_goal_flags  # (N,), this is set in the termination function and stored in the env
+    velocity_reward = torch.where(inside_goal_flags, -car_speeds / max_speed, car_speeds / max_speed)
 
     return velocity_reward
 

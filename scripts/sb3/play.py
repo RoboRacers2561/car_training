@@ -84,9 +84,6 @@ from isaaclab.utils.dict import print_dict
 try:
     from isaaclab.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
 except ImportError:
-    try:
-    from isaaclab.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
-except Exception:
     from isaaclab_rl.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
     
 

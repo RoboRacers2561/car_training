@@ -358,28 +358,26 @@ def reset_robot_root_random_deterministic_mix(
     """
     Reset robot position 50% of time randomly on the track and 50% of time to a corner.
     """
-    corners_pos = {
-        "top_left": (-4.8, 4.8, 0.05),
-        "top_right": (4.8, 4.8, 0.05),
-        "bottom_left": (-4.8, -4.8, 0.05),
-        "bottom_right": (4.8, -4.8, 0.05)
-    }
+    possible_positions_yaws = []
+    max_extent = 4.5
+    points = np.linspace(-max_extent, max_extent, num=10)  # 10 points along each edge
+    for x in points:
+        possible_positions_yaws.append(((x, max_extent, 0.05), torch.pi/2))   # top edge
+        possible_positions_yaws.append(((x, -max_extent, 0.05), 3*torch.pi/2))  # bottom edge
+    for y in points:
+        possible_positions_yaws.append(((-max_extent, y, 0.05), torch.pi))  # left edge
+        possible_positions_yaws.append(((max_extent, y, 0.05), 2*torch.pi))   # right edge
 
-    corners_yaw = {
-        "top_left": 3/4*torch.pi,       # facing towards bottom right
-        "top_right": 1/4*torch.pi,     # facing towards bottom left
-        "bottom_left": 5/4*torch.pi,   # facing towards top right
-        "bottom_right": 7/4*torch.pi   # facing towards top left
-    }
-
-    corner_names = list(corners_pos.keys())
+    possible_positions_yaws.append(((-max_extent, max_extent, 0.05), torch.pi))
+    possible_positions_yaws.append(((max_extent, max_extent, 0.05), 2*torch.pi))
+    possible_positions_yaws.append(((-max_extent, -max_extent, 0.05), torch.pi))
+    possible_positions_yaws.append(((max_extent, -max_extent, 0.05), 2*torch.pi))
 
     random_number = torch.rand((), device=env.device)
-    if random_number < 0.0:
+    if random_number < 0.7:  # 70% random on track, 30% corners
         reset_robot_root_random(env, env_ids, asset_cfg, yaw_noise_std=0.6, xy_rand_radius=0.0)
     else:
-        # choose a random corner
-        corner_name = np.random.choice(corner_names)
-        position = corners_pos[corner_name]
-        yaw = corners_yaw[corner_name]
+
+        position_yaw = possible_positions_yaws[torch.randint(0, len(possible_positions_yaws), (1,)).item()]
+        position, yaw = position_yaw
         reset_robot_root_pose(env, env_ids, asset_cfg, position=position, yaw=yaw)
