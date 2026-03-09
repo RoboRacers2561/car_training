@@ -333,6 +333,14 @@ def aligned_robot_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, camer
     debug_img = gray_crops[0, 0].cpu().numpy() * 255
     cv2.imwrite("debug_overhead_camera_neighborhood_image.png", debug_img)
 
+    # return white images for now, before implementing fully.
+    white_imgs = torch.ones_like(gray_crops, device=device)
+
+    # save white image for debugging
+    debug_white_img = white_imgs[0, 0].cpu().numpy() * 255
+    cv2.imwrite("debug_white_image.png", debug_white_img)
+
+    return white_imgs
     return gray_crops
 
 def aligned_robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:

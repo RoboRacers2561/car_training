@@ -104,11 +104,12 @@ class CustomMultiInputExtractor(BaseFeaturesExtractor):
         super().__init__(observation_space, features_dim)
 
         image_space = observation_space.spaces["image"]
+        robot_image_space = observation_space.spaces["robot_image"]
         vel_space = observation_space.spaces["joint_vel_rel"]
 
         # --- CNN with residual blocks ---
         self.cnn = nn.Sequential(
-            nn.Conv2d(in_channels=image_space.shape[0], out_channels=16, kernel_size=5, stride=2, padding=2),
+            nn.Conv2d(in_channels=image_space.shape[0] + robot_image_space.shape[0], out_channels=16, kernel_size=5, stride=2, padding=2),
             nn.BatchNorm2d(16),
             nn.ReLU(),
             ResidualBlock(16),
@@ -153,9 +154,11 @@ class CustomMultiInputExtractor(BaseFeaturesExtractor):
 
     def forward(self, observations):
         img = observations["image"]
+        robot_img = observations["robot_image"]
+        img = torch.cat([img, robot_img], dim=1)  # concatenate along channel dimension
         vel = observations["joint_vel_rel"]
 
-        img_features = self.image_fc(self.cnn(img))
+        img_features = self.image_fc(self.cnn(img)) 
         vel_features = self.vel_fc(vel)
 
         fused = torch.cat([img_features, vel_features], dim=1)
