@@ -229,119 +229,63 @@ def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEnt
 
     return gray_crops
 
-def aligned_robot_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, camera_name: str = "overhead_camera") -> torch.Tensor:
+def aligned_robot_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     """
-    Find aligned image of robots in frame.
-    
-    :param env: The environment instance containing the robot and track information.
-    :type env: ManagerBasedRLEnv
-    :param asset_cfg: The configuration of the car asset, used to identify the robot's position and heading.
-    :type asset_cfg: SceneEntityCfg
-    :param camera_name: The name of the camera to use for capturing the image.
-    :type camera_name: str
-    :return: Aligned grayscale images of shape (N, 1, crop, crop) centered on the robot and rotated to align with its heading.
-    :rtype: Tensor
+    Generate aligned image of robots in frame, using position of heading of all robots.
+
+    Returns:
+    torch.Tensor: Aligned grayscale images of shape (N, 1, crop, crop)
     """
     logger = get_logger(env)
 
-    # TODO: change to using overhead camera instead of static track image
-    if hasattr(env.unwrapped, 'static_track_image') and env.unwrapped.static_track_image is not None:
-        pass
-    else:
-        # return a dummy image if static image is not available
-        num_envs = env.unwrapped.num_envs
-        logger.warning("static track image not found, returning dummy gray image")
-        return torch.zeros((num_envs, 1, CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), device=env.unwrapped.device, dtype=torch.float32)
+    # Get position and heading of all robots & obstacles in each environment
+    # for now, I have a function for robot and obstacles. In the future, a better approach is needed, combining the two into one function
+    robot_positions = robot_pos(env, asset_cfg, do_convert_coords=True)
+    robot_headings = robot_heading(env, asset_cfg)
 
-    imgs = env.scene[camera_name].data.output["rgb"]  # (num_envs, H, W, 3)
+    obstacle_positions = obstacle_pos(env, env.cfg.scene.obstacle_car)
+    obstacle_headings = obstacle_heading(env, env.cfg.scene.obstacle_car)
 
-    device = env.unwrapped.device
+    # Draw trapezoid at each robot location on blank (white) image, then crop and align similar to track neighborhood image
 
-    #imgs = env.unwrapped.static_track_image
-    N, H, W, _ = imgs.shape
-    logger.debug(f"Overhead camera image shape: number of envs={N}, H={H}, W={W}")
+    blank_image = torch.ones_like(env.unwrapped.static_track_image)  # (N, H, W, 3)
 
-    # Convert to float in [0, 1] and NCHW
-    if imgs.dtype != torch.float32:
-        imgs = imgs.float() / 255.0
-    imgs = imgs.permute(0, 3, 1, 2)  # (N, 3, H, W)
-    car_xy = robot_pos(env, asset_cfg, do_convert_coords=True)
-    logger.debug_lazy("Car positions (image coords): %s", lambda: car_xy)
+    # return white image for debugging
+    blank_image = torch.ones((env.unwrapped.num_envs, 1, CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), device=env.unwrapped.device, dtype=torch.float32)
+    #save image
+    debug_img = blank_image[0, 0].cpu().numpy() * 255
+    cv2.imwrite("debug_aligned_robot_image.png", debug_img)
+    return blank_image
 
-    # Normalize to [-1, 1] for grid_sample
-    cx = 2.0 * car_xy[:, 0] / (W - 1) - 1.0
-    cy = 2.0 * car_xy[:, 1] / (H - 1) - 1.0
 
-    lin = torch.linspace(-1, 1, CROPPED_IMAGE_SIZE, device=device)
-    dy, dx = torch.meshgrid(lin, lin, indexing="ij")
+def obstacle_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """
+    Get the position of the obstacle car relative to the environment.
 
-    # Scale offsets to image size
-    dx = dx[None] * (CROPPED_IMAGE_SIZE / W)
-    dy = dy[None] * (CROPPED_IMAGE_SIZE / H)
-    logger.debug(f"Crop offsets dx shape: {dx.shape}, dy shape: {dy.shape}")
+    :return: The (x, y) position of the obstacle car.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
 
-    # Shift grid to each car center
-    grid = torch.stack(
-        (
-            cx[:, None, None] + dx,
-            cy[:, None, None] + dy,
-        ),
-        dim=-1,
-    )  # (N, crop, crop, 2)
+    asset: RigidObject = env.scene[asset_cfg.name]
+    relative_pos = asset.data.root_link_pos_w - env.scene.env_origins  # Relative to environment origin
+    logger.debug_lazy("Obstacle car world positions: %s", lambda: relative_pos)
+    return relative_pos[:, :2]  # Return x, y position
 
-    # Get car headings and compute rotation angles
-    headings = asset_heading = robot_heading(env, asset_cfg)  # (N, 2)
-    angles = torch.atan2(-headings[:, 0], headings[:, 1]) + torch.pi  # (N,) Negative x to match image coords
 
-    cos = torch.cos(angles).view(-1, 1, 1, 1)  # (N,1,1,1)
-    sin = torch.sin(angles).view(-1, 1, 1, 1)  # (N,1,1,1)
+def obstacle_heading(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """Get the heading of the obstacle car as a unit vector."""
+    logger = get_logger(env)
+    asset: RigidObject = env.scene[asset_cfg.name]
+    obstacle_heading = asset.data.heading_w
 
-    center = torch.stack((cx, cy), dim=-1).view(-1, 1, 1, 2)  # (N,1,1,2)
-    rel = grid - center  # (N,H,W,2)
-    rel_x = rel[..., 0:1]
-    rel_y = rel[..., 1:2]
+    logger.debug_lazy("Obstacle car heading: %s", lambda: obstacle_heading)
 
-    rot_x = cos * rel_x - sin * rel_y
-    rot_y = sin * rel_x + cos * rel_y
+    # make a unit vector
+    obstacle_heading = torch.stack((torch.cos(obstacle_heading), -torch.sin(obstacle_heading)), dim=-1) # negative y to match image coords
+    return obstacle_heading
 
-    grid = torch.cat((rot_x, rot_y), dim=-1) + center  # (N,H,W,2)
 
-    # Sample with border padding
-    crops = F.grid_sample(
-        imgs,
-        grid,
-        mode="bilinear",
-        padding_mode="border",
-        align_corners=True,
-    )  # (N, 3, crop, crop)
-
-    # Convert to grayscale
-    gray_crops = 0.2989 * crops[:, 0:1, :, :] + 0.5870 * crops[:, 1:2, :, :] + 0.1140 * crops[:, 2:3, :, :]  # (N, 1, crop, crop)
-
-    gray_crops = (gray_crops > 0.5).float()
-    # log the shape of gray crops
-
-    logger.debug("Obtained overhead camera neighborhood images.")
-    logger.debug_lazy("Overhead camera neighborhood image shape: %s", lambda: list(gray_crops.shape))
-
-    logger.debug_lazy("Overhead camera neighborhood image min/max: %s", lambda: list((gray_crops.min().item(), gray_crops.max().item())))
-
-    # print image shape for debugging
-    # print(f"track neighborhood image shape: {gray_crops.shape}")
-
-    #save debug image
-    debug_img = gray_crops[0, 0].cpu().numpy() * 255
-    cv2.imwrite("debug_overhead_camera_neighborhood_image.png", debug_img)
-
-    # return white images for now, before implementing fully.
-    white_imgs = torch.ones_like(gray_crops, device=device)
-
-    # save white image for debugging
-    debug_white_img = white_imgs[0, 0].cpu().numpy() * 255
-    cv2.imwrite("debug_white_image.png", debug_white_img)
-
-    return white_imgs
-    return gray_crops
 
 def aligned_robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     """

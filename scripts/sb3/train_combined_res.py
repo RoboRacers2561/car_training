@@ -129,7 +129,7 @@ class CustomMultiInputExtractor(BaseFeaturesExtractor):
 
         # Compute CNN output size dynamically
         with torch.no_grad():
-            sample_input = torch.zeros(1, *image_space.shape)
+            sample_input = torch.zeros(1, image_space.shape[0] + robot_image_space.shape[0], image_space.shape[1], image_space.shape[2])  # (1, C, H, W)
             n_flatten = self.cnn(sample_input).shape[1]
             print(f"CNN output size: {n_flatten}")
             print(f"image shape: {image_space.shape}")
@@ -155,6 +155,7 @@ class CustomMultiInputExtractor(BaseFeaturesExtractor):
     def forward(self, observations):
         img = observations["image"]
         robot_img = observations["robot_image"]
+        
         img = torch.cat([img, robot_img], dim=1)  # concatenate along channel dimension
         vel = observations["joint_vel_rel"]
 

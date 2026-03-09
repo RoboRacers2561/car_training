@@ -217,7 +217,7 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
     overhead_camera: OverheadCameraCfg | None = None
 
     # obstacle
-    obstacle_car: ArticulationCfg = LEATHERBACK_CFG.replace(prim_path="{ENV_REGEX_NS}/ObstacleCar")  # another car as obstacle
+    #obstacle_car: ArticulationCfg = LEATHERBACK_CFG.replace(prim_path="{ENV_REGEX_NS}/ObstacleCar")  # another car as obstacle
 
     # lights
     dome_light = AssetBaseCfg(
@@ -275,17 +275,17 @@ class EventCfg:
     reset_robot_position = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
     # reset for obstacle car
-    reset_obstacle_car_position = EventTerm(
-        func=reset_robot_root_random,
-        mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("obstacle_car"),
-            "z": 0.05,
-            "yaw_noise_std": 0.0, # radians, e.g. 0.2 ~= 11.5 degrees
-            "lookahead": 5,       # how many points ahead to compute tangent
-            "xy_rand_radius": 0.5
-        },
-    )
+    # reset_obstacle_car_position = EventTerm(
+    #     func=reset_robot_root_random,
+    #     mode="reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("obstacle_car"),
+    #         "z": 0.05,
+    #         "yaw_noise_std": 0.0, # radians, e.g. 0.2 ~= 11.5 degrees
+    #         "lookahead": 5,       # how many points ahead to compute tangent
+    #         "xy_rand_radius": 0.5
+    #     },
+    # )
 
 @configclass
 class RewardsCfg:
