@@ -364,3 +364,37 @@ def turning_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     return penalty
 
 
+def distance_to_wall_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """
+    Penalty for being too close to the walls, encouraging the reset agent to stay in the middle of the track.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+
+    :return: Distance to wall penalty for the reset agent.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+    logger.debug("Calculating distance to wall penalty...")
+
+    distance_to_wall = env.unwrapped.current_observation["distance_to_wall_normalized"]  # (N,)
+
+    # Define a threshold distance below which the penalty starts to apply
+    threshold_distance = 0.5  # Adjust this value based on the scale of your environment
+
+    # Calculate penalty as a negative value that increases as distance to wall decreases
+    penalty = torch.where(distance_to_wall < threshold_distance, -1 * (threshold_distance - distance_to_wall), torch.zeros_like(distance_to_wall))
+    penalty = penalty.squeeze(1)
+
+    # check if direction to goal is vertical and if so, do not apply penalty since we are going towards the goal
+    direction_to_goal = env.unwrapped.current_observation["direction_to_goal"]  # (N, 2)
+    vertical_vec = torch.tensor([0.0, -1.0], device=env.device)  # (2,) using [0, -1] because the camera vertical axis points
+    alignment = F.cosine_similarity(direction_to_goal, vertical_vec.unsqueeze(0), dim=1)  # (N,)
+    penalty = torch.where(alignment > 0.8, torch.zeros_like(penalty), penalty)
+
+
+    logger.debug_lazy("Distance to wall: %s", lambda: distance_to_wall)
+    logger.debug_lazy("Distance to wall penalty: %s", lambda: penalty)
+
+    # print(f"Distance to wall: {distance_to_wall}, Penalty: {penalty}")
+    return penalty
