@@ -227,11 +227,11 @@ def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEnt
     debug_img = gray_crops[0, 0].cpu().numpy() * 255
     cv2.imwrite("debug_track_neighborhood_image.png", debug_img)
 
-    return gray_crops
+    return gray_crops # (N, 1, crop, crop)
 
-def aligned_robot_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+def aligned_obstacle_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     """
-    Generate aligned image of robots in frame, using position of heading of all robots.
+    Generate aligned image of obstacles in frame, using position of heading of all obstacles.
 
     Returns:
     torch.Tensor: Aligned grayscale images of shape (N, 1, crop, crop)
@@ -247,14 +247,22 @@ def aligned_robot_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> to
     obstacle_headings = obstacle_heading(env, env.cfg.scene.obstacle_car)
 
     # Draw trapezoid at each robot location on blank (white) image, then crop and align similar to track neighborhood image
+    # Blank image
+    blank_image = torch.ones_like((env.unwrapped.num_envs, 1, CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), device=env.unwrapped.device, dtype=torch.float32)
 
-    blank_image = torch.ones_like(env.unwrapped.static_track_image)  # (N, H, W, 3)
+    # Draw obstacles as trapezoid with length 10 pixels, bottom width 10 pixels, top width 5 pixels
+    # This is drawn in the robots (rotated) frame, so find the relative position and heading of the obstacle to the robot, then draw the trapezoid accordingly
+    # note this may be outside the image, in which case it isnt included
+    rel_pos = obstacle_positions - robot_positions # (N, 2)
+    rel_heading = obstacle_headings - robot_headings # (N, 2)
+
+    
 
     # return white image for debugging
     blank_image = torch.ones((env.unwrapped.num_envs, 1, CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), device=env.unwrapped.device, dtype=torch.float32)
     #save image
     debug_img = blank_image[0, 0].cpu().numpy() * 255
-    cv2.imwrite("debug_aligned_robot_image.png", debug_img)
+    cv2.imwrite("debug_aligned_obstacle_image.png", debug_img)
     return blank_image
 
 
