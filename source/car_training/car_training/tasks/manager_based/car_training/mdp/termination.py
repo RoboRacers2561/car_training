@@ -9,7 +9,7 @@ from isaaclab.managers import SceneEntityCfg
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
-from car_training.tasks.manager_based.car_training.mdp.observation import aligned_track_neighborhood_image
+from car_training.tasks.manager_based.car_training.mdp.observation import aligned_track_neighborhood_image, robot_pos, robot_heading
 from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import GpuSafeLogger
 
 _LOGGER: Optional[GpuSafeLogger] = None
@@ -58,7 +58,7 @@ def off_track_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> 
     logger.debug_lazy("Off track flags: %s", lambda: off_track_flags)
     return off_track_flags
 
-def collision_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+def collision_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, obstacle_cfg: SceneEntityCfg, collision_threshold: float = 20.0) -> torch.Tensor:
     """
     Vectorized termination function that ends an episode if the car 'collides' (is too close) with another object.
 
@@ -71,8 +71,12 @@ def collision_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> 
     logger = get_logger(env)
 
     # Placeholder implementation
-    # TODO: Implement actual collision detection logic with the helper
-    collision_flags = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+    robot_positions = robot_pos(env, asset_cfg, do_convert_coords=True)  # (N, 2)
+    obstacle_positions = robot_pos(env, obstacle_cfg, do_convert_coords=True)  # (N, 2)
 
+    # Compute distance between robot and obstacle
+    distances = torch.norm(robot_positions - obstacle_positions, dim=1)  # (N,)
+
+    collision_flags = distances < collision_threshold
     logger.debug_lazy("Collision flags: %s", lambda: collision_flags)
     return collision_flags

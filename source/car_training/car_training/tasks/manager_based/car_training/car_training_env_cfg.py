@@ -27,7 +27,7 @@ from car_training.tasks.manager_based.car_training.mdp.observation import  (
     aligned_robot_vel,
     aligned_obstacle_image,
 )
-from car_training.tasks.manager_based.car_training.mdp.termination import off_track_termination
+from car_training.tasks.manager_based.car_training.mdp.termination import off_track_termination, collision_termination
 from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSteerAckermannAction
 from car_training.tasks.manager_based.car_training.configs.leatherback_params import LeatherbackParamsCfg
 from car_training.tasks.manager_based.car_training.configs.ttr_params import TTRNanoParamsCfg
@@ -309,6 +309,9 @@ class TerminationsCfg:
     # Out of bounds termination
     out_of_bounds = DoneTerm(func=off_track_termination, 
                              params={"asset_cfg": SceneEntityCfg("robot"),},)
+    
+    collision = DoneTerm(func=collision_termination,
+                         params={"asset_cfg": SceneEntityCfg("robot"), "obstacle_cfg": SceneEntityCfg("obstacle_car")},)
 
 
 

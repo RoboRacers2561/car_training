@@ -435,6 +435,7 @@ def distance_from_other_agents_penalty(image, min_distance: float = 5.0, weight:
     return penalty
 
 
+
 if __name__ == "__main__":
     # test_image = cv2.imread("debug_image_testing.png")
     # car_center = get_green_car_center(test_image, debug=True)

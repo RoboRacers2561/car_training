@@ -145,7 +145,8 @@ def get_total_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg, max_spee
 
     total_reward_no_smoothing = torch.from_numpy(rewards).to(device=env.device)
     smooth_steering = steering_jerk_penalty(env, weight=0.003)
-    total_reward = total_reward_no_smoothing + smooth_steering
+    obstacle_collision_penalty = collision_penalty(env, asset_cfg=SceneEntityCfg("robot"), obstacle_cfg=SceneEntityCfg("obstacle_car"), weight=10.0)
+    total_reward = total_reward_no_smoothing + smooth_steering + obstacle_collision_penalty
     logger.debug_lazy("Total reward with smooth steering: %s",
                       lambda: total_reward)
 
@@ -245,4 +246,32 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.
     # drive.action_prev = action_now.clone()
 
     return penalty
+
+
+def collision_penalty(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, obstacle_cfg: SceneEntityCfg, collision_threshold: float = 20.0, weight: float = 1.0) -> torch.Tensor:
+    """
+    Placeholder collision penalty function that currently returns zero for all environments.
+
+    :return: Collision penalty (currently zero).
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+
+    logger.debug("Calculating collision penalty...")
+
+    # Get positions of robot and obstacle
+    robot_positions = robot_pos(env, asset_cfg, do_convert_coords=True)  # (N, 2)
+    obstacle_positions = robot_pos(env, obstacle_cfg, do_convert_coords=True)  # (N, 2)
+
+    # Compute distance between robot and obstacle
+    distances = torch.norm(robot_positions - obstacle_positions, dim=1)  # (N,)
+
+    collision_flags = distances < collision_threshold
+    penalty = torch.where(collision_flags, torch.tensor(1.0, device=env.device), torch.tensor(0.0, device=env.device))
+
+    logger.debug_lazy("Collision flags: %s", lambda: collision_flags)
+    logger.debug_lazy("Collision penalty: %s", lambda: penalty)
+
+    penalty = -weight * penalty
+    return penalty 
 
