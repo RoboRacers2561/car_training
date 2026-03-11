@@ -60,6 +60,28 @@ def set_robot_visibility(env: ManagerBasedRLEnv, visible: bool):
         else:
             UsdGeom.Imageable(prim).MakeInvisible()
 
+
+def set_obstacle_visibility(env: ManagerBasedRLEnv, visible: bool):
+    """
+    Set the visibility of the obstacle in the simulation environment.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+    :param visible: Whether to make the obstacle visible or invisible.
+    :type visible: bool
+    """
+    logger = get_logger(env)
+    obstacle_paths = [f"{p}/ObstacleCar" for p in env.scene.env_prim_paths]
+
+    for p in obstacle_paths:
+        logger.info(f"{'Showing' if visible else 'Hiding'} obstacle prim at path: {p}")
+        prim = get_prim_at_path(p)
+        if visible:
+            UsdGeom.Imageable(prim).MakeVisible()
+        else:
+            UsdGeom.Imageable(prim).MakeInvisible()
+
+
 def init_static_track_image(env: ManagerBasedRLEnv, camera_name: str = "overhead_camera", num_warmup_steps: int = 10):
     """
     Initialize and capture a static track image from a specified camera in the environment. This method should be called once for all. 
@@ -81,6 +103,7 @@ def init_static_track_image(env: ManagerBasedRLEnv, camera_name: str = "overhead
 
     # hide robots so they don't appear
     set_robot_visibility(env, visible=False)
+    set_obstacle_visibility(env, visible=False)
 
     logger.debug("Rendering simulation for %d warmup steps to capture static track image.", num_warmup_steps)
     # Render some new frames (avoiding using step)
@@ -105,6 +128,7 @@ def init_static_track_image(env: ManagerBasedRLEnv, camera_name: str = "overhead
 
     # show robots back
     set_robot_visibility(env, visible=True)
+    set_obstacle_visibility(env, visible=True)
 
     return static_track_image
 

@@ -217,7 +217,7 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
     overhead_camera: OverheadCameraCfg | None = None
 
     # obstacle
-    #obstacle_car: ArticulationCfg = LEATHERBACK_CFG.replace(prim_path="{ENV_REGEX_NS}/ObstacleCar")  # another car as obstacle
+    obstacle_car: ArticulationCfg = LEATHERBACK_CFG.replace(prim_path="{ENV_REGEX_NS}/ObstacleCar")  # another car as obstacle
 
     # lights
     dome_light = AssetBaseCfg(
@@ -252,8 +252,8 @@ class ObservationsCfg:
         image = ObsTerm(func=aligned_track_neighborhood_image,
                         params={"asset_cfg": SceneEntityCfg("robot"),},
                         clip=(0.0, 255.0),)
-        robot_image = ObsTerm(func=aligned_obstacle_image,
-                        params={"asset_cfg": SceneEntityCfg("robot"),},
+        robot_image = ObsTerm(func=aligned_obstacle_image, # needs robot and obstacle cfg to find the relative pose and then align the image accordingly
+                        params={"asset_cfg": SceneEntityCfg("robot"), "obstacle_cfg": SceneEntityCfg("obstacle_car")},
                         clip=(0.0, 255.0),)
         joint_vel_rel = ObsTerm(func=aligned_robot_vel,
                                 params={"asset_cfg": SceneEntityCfg("robot")},
@@ -275,17 +275,17 @@ class EventCfg:
     reset_robot_position = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
     # reset for obstacle car
-    # reset_obstacle_car_position = EventTerm(
-    #     func=reset_robot_root_random,
-    #     mode="reset",
-    #     params={
-    #         "asset_cfg": SceneEntityCfg("obstacle_car"),
-    #         "z": 0.05,
-    #         "yaw_noise_std": 0.0, # radians, e.g. 0.2 ~= 11.5 degrees
-    #         "lookahead": 5,       # how many points ahead to compute tangent
-    #         "xy_rand_radius": 0.5
-    #     },
-    # )
+    reset_obstacle_car_position = EventTerm(
+        func=reset_robot_root_random,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("obstacle_car"),
+            "z": 0.05,
+            "yaw_noise_std": 0.0, # radians, e.g. 0.2 ~= 11.5 degrees
+            "lookahead": 5,       # how many points ahead to compute tangent
+            "xy_rand_radius": 0.5
+        },
+    )
 
 @configclass
 class RewardsCfg:
