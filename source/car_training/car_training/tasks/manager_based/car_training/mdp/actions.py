@@ -26,8 +26,11 @@ TTR_NANO_FRONT_STEER_NAMES = ["turn_L", "turn_R"]
 
 
 MAX_STEER = 0.6  # rad
-MAX_THROTTLE = 30
-MIN_THROTTLE = -15
+MAX_THROTTLE_DRIVING_AGENT = 30
+MIN_THROTTLE_DRIVING_AGENT = 10
+
+MAX_THROTTLE_RESET_AGENT = 30
+MIN_THROTTLE_RESET_AGENT = -15
 
 def ackermann_to_wheel_angles(delta_center: torch.Tensor,
                              wheelbase: float,
@@ -97,6 +100,15 @@ class ThrottleSteerAckermannAction(ActionTerm):
         self.buffer_count = torch.zeros(env.num_envs, dtype=torch.long, device=env.device)
 
         self.max_steer = MAX_STEER
+
+        if env.unwrapped.task_name == "Basic-Car-Training-v0":
+            self.max_throttle = MAX_THROTTLE_DRIVING_AGENT
+            self.min_throttle = MIN_THROTTLE_DRIVING_AGENT
+        elif env.unwrapped.task_name == "Reset-Agent":
+            self.max_throttle = MAX_THROTTLE_RESET_AGENT
+            self.min_throttle = MIN_THROTTLE_RESET_AGENT
+        else:
+            raise ValueError(f"Unknown task name {env.unwrapped.task_name} for setting throttle limits")
         
 
     @property
@@ -150,10 +162,10 @@ class ThrottleSteerAckermannAction(ActionTerm):
 
         # Map throttle from [-1, 1] → [0, 1]
         throttle_norm = 0.5 * (actions[:, 0] + 1.0)
-        throttle = MIN_THROTTLE + throttle_norm * (MAX_THROTTLE - MIN_THROTTLE)
+        throttle = self.min_throttle + throttle_norm * (self.max_throttle - self.min_throttle)
         self.logger.debug_lazy("Processed throttle commands: %s", lambda: throttle)
 
-        steer = MAX_STEER * actions[:, 1]
+        steer = self.max_steer * actions[:, 1]
         self.logger.debug_lazy("Processed steer commands: %s", lambda: steer)
         
         # store as (num_envs, 2) again, but now processed
