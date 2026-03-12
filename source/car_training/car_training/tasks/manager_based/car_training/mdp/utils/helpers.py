@@ -57,8 +57,9 @@ def find_track_points_from_image(image: np.ndarray, debug = False, image_idx: in
     # Debugging: Save images if debug is True
     if debug:
         debug_contour_image = image.copy()
-        cv2.drawContours(debug_contour_image, contours, -1, (0, 255, 0), 2)
-        cv2.imwrite(f"{TEST_DATA_PATH}/debug_contours_{image_idx}.png", debug_contour_image)
+        for point in track_points:
+            cv2.circle(debug_contour_image, (int(point[0]), int(point[1])), 2, (0, 255, 0), -1)
+        cv2.imwrite(f"{TEST_DATA_PATH}/debug_track_points_{image_idx}.png", debug_contour_image)
 
     return track_points
 
