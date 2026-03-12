@@ -45,7 +45,7 @@ ttr_nano_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tas
 track_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/scene_assets/")
 TRACK_USD_PATHS = []
 for i in range(0, 12):
-    TRACK_USD_PATHS.append(track_usd_path + f"tracks/track_{i}.usd")
+    TRACK_USD_PATHS.append(track_usd_path + f"tracks_thickness_random/track_{i}.usd")
 
 
 ## 
