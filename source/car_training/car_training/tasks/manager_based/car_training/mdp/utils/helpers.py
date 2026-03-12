@@ -17,7 +17,7 @@ if not os.path.exists(TEST_DATA_PATH):
 logger = logging.getLogger("car_training" + __name__.rpartition(".car_training")[-1])
 
 
-def find_track_points_from_image(image: np.ndarray, debug = False, image_name_save: str = "debug_track_points.png"):
+def find_track_points_from_image(image: np.ndarray, debug = False, image_idx: int = 0):
     """
     Process the image to find track points.
 
@@ -29,20 +29,21 @@ def find_track_points_from_image(image: np.ndarray, debug = False, image_name_sa
     :rtype: list[tuple[float, float]]
     """
     # Convert to grayscale
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-    # Threshold (invert so line is white)
-    _, binary = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY_INV)
+    loewr_black = np.array([0, 0, 0])
+    upper_black = np.array([180, 255, 80])
 
-    # Optional: clean small noise
-    kernel = np.ones((3,3), np.uint8)
-    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
+    # Create a binary mask where black pixels are white and the rest are black
+    binary = cv2.inRange(hsv, loewr_black, upper_black)
 
+    if debug:
+        cv2.imwrite(f"{TEST_DATA_PATH}/debug_binary_{image_idx}.png", binary)
     # Find contours
     contours, _ = cv2.findContours(
         binary,
         cv2.RETR_EXTERNAL,   # only outer contour
-        cv2.CHAIN_APPROX_NONE  # keep all points
+        cv2.CHAIN_APPROX_NONE  # keep all contour points
     )
 
     # Select the largest contour
@@ -53,25 +54,59 @@ def find_track_points_from_image(image: np.ndarray, debug = False, image_name_sa
 
     logger.debug(f"Number of track points detected: {len(track_points)}")
 
-    # if debug draw the track points on the image
-    if debug:
-        debug_image = image.copy()
-        for point in track_points:
-            cv2.circle(debug_image, (int(point[0]), int(point[1])), 2, (0, 0, 255), -1)
-        cv2.imwrite(f"{TEST_DATA_PATH}/debug_track_points.png", debug_image)
-
     # Debugging: Save images if debug is True
     if debug:
-        cv2.imwrite(f"{TEST_DATA_PATH}/debug_gray.png", gray)
         debug_contour_image = image.copy()
         cv2.drawContours(debug_contour_image, contours, -1, (0, 255, 0), 2)
-        cv2.imwrite(f"{TEST_DATA_PATH}/{image_name_save}", debug_contour_image)
+        cv2.imwrite(f"{TEST_DATA_PATH}/debug_contours_{image_idx}.png", debug_contour_image)
 
     return track_points
 
-def find_closest_track_points(
+def find_yellow_walls_from_image(image: np.ndarray, debug = False, image_idx: int = 0):
+    """
+    Process the image to find yellow wall points.
+
+    :param image: Input image from the car's camera.
+    :type image: np.ndarray
+    :param debug: If True, will save some debug images. The images will be save in test_data folder.
+    :type debug: bool
+    :return: List of yellow wall points as (x, y) tuples.
+    :rtype: list[tuple[float, float]]
+    """
+    # Convert to HSV color space
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+    # Define range for yellow color in HSV
+    lower_yellow = np.array([20, 150, 150])
+    upper_yellow = np.array([40, 255, 255])
+
+    # Create a mask for yellow color
+    mask = cv2.inRange(hsv, lower_yellow, upper_yellow)
+
+    if debug:
+        cv2.imwrite(f"{TEST_DATA_PATH}/debug_yellow_mask_{image_idx}.png", mask)
+
+    # Find contours of the masked image
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+
+    contour = max(contours, key=cv2.contourArea)
+
+    yellow_wall_points = contour.squeeze()  # shape (N, 2)
+
+    logger.debug(f"Number of yellow wall points detected: {len(yellow_wall_points)}")
+
+    # if debug draw the yellow wall points on the image
+    if debug:
+        debug_image = image.copy()
+        for point in yellow_wall_points:
+            cv2.circle(debug_image, (int(point[0]), int(point[1])), 2, (0, 255, 255), -1)
+        cv2.imwrite(f"{TEST_DATA_PATH}/debug_yellow_walls_{image_idx}.png", debug_image)
+
+    return yellow_wall_points
+
+def find_closest_point(
     car_centers: torch.Tensor,        # (N, 2)
-    track_padded: torch.Tensor,        # (N, T, 2)
+    tensor_padded: torch.Tensor,        # (N, T, 2)
     lengths: torch.Tensor              # (N,)
 ) -> torch.Tensor:
     """
@@ -85,13 +120,13 @@ def find_closest_track_points(
     :type lengths: torch.Tensor
     """
     
-    N, Tmax, _ = track_padded.shape
+    N, Tmax, _ = tensor_padded.shape
 
     # (N, Tmax)
-    dist2 = torch.sum((track_padded - car_centers.unsqueeze(1))**2, dim=2)
+    dist2 = torch.sum((tensor_padded - car_centers.unsqueeze(1))**2, dim=2)
 
     # mask padded indices
-    idxs = torch.arange(Tmax, device=track_padded.device).unsqueeze(0)  # (1, Tmax)
+    idxs = torch.arange(Tmax, device=tensor_padded.device).unsqueeze(0)  # (1, Tmax)
     valid = idxs < lengths.unsqueeze(1)                                 # (N, Tmax)
 
     dist2 = dist2.masked_fill(~valid, float("inf"))
@@ -100,8 +135,8 @@ def find_closest_track_points(
     closest_idx = torch.argmin(dist2, dim=1)
 
     # (N, 2)
-    batch = torch.arange(N, device=track_padded.device)
-    closest_pts = track_padded[batch, closest_idx]
+    batch = torch.arange(N, device=tensor_padded.device)
+    closest_pts = tensor_padded[batch, closest_idx]
     return closest_pts
 
 def get_green_car_mask(image, debug=False):

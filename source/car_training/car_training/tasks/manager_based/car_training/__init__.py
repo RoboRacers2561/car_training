@@ -21,3 +21,13 @@ gym.register(
         "sb3_cfg_entry_point": f"{agents.__name__}:sb3_ppo_cfg.yaml",
     },
 )
+
+gym.register(
+    id="Reset-Agent",
+    entry_point="car_training.tasks.manager_based.car_training.reset_training_env:CarResetEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.reset_training_env_cfg:CarTrainingEnvCfg",
+        "sb3_cfg_entry_point": f"{agents.__name__}:sb3_ppo_reset_agent_cfg.yaml",
+    },
+)

@@ -45,7 +45,6 @@ class WasdTeleop:
         self.steer_angle = float(steer_angle)
         self.number_of_envs = number_of_envs
         self.current_env_index = 0
-        self.max_steer = 0.6  # rad
 
         self._input = carb.input.acquire_input_interface()
         self._keyboard = omni.appwindow.get_default_app_window().get_keyboard()
@@ -58,23 +57,18 @@ class WasdTeleop:
 
         if e.input == carb.input.KeyboardInput.W:
             self.throttle_speed += 1 
-            print(f"setting throttle to {self.throttle_speed}")
         elif e.input == carb.input.KeyboardInput.S:
             self.throttle_speed -= 1
-            print(f"setting throttle to {self.throttle_speed}")
         elif e.input == carb.input.KeyboardInput.A:
-            if self.steer_angle < self.max_steer:
-                self.steer_angle += 0.1
-            print(f"setting steer angle to {self.steer_angle}")
+            self.steer_angle += 0.1
         elif e.input == carb.input.KeyboardInput.D:
-            if self.steer_angle > -self.max_steer:
-                self.steer_angle -= 0.1
-            print(f"setting steer angle to {self.steer_angle}")
+            self.steer_angle -= 0.1
         elif e.input == carb.input.KeyboardInput.TAB:
             print("Switching environment")
             self.current_env_index = (self.current_env_index + 1) % self.number_of_envs
             print(f"Current environment index: {self.current_env_index}")
             
+        print(f"Throttle: {self.throttle_speed:.2f}, Steer: {self.steer_angle:.2f}")
         return True  # keep receiving events
     
     def get(self):

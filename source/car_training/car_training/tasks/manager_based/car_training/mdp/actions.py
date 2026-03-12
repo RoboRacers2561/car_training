@@ -27,7 +27,7 @@ TTR_NANO_FRONT_STEER_NAMES = ["turn_L", "turn_R"]
 
 MAX_STEER = 0.6  # rad
 MAX_THROTTLE = 30
-MIN_THROTTLE = 10
+MIN_THROTTLE = -15
 
 def ackermann_to_wheel_angles(delta_center: torch.Tensor,
                              wheelbase: float,

@@ -20,7 +20,7 @@ import cv2
 import logging
 import torch.nn.functional as F
 
-from car_training.tasks.manager_based.car_training.mdp.utils.helpers import find_closest_track_points
+from car_training.tasks.manager_based.car_training.mdp.utils.helpers import find_closest_point
 from car_training.tasks.manager_based.car_training.mdp.observation import (
     robot_pos,
     aligned_robot_vel,
@@ -70,7 +70,7 @@ def distance_from_center_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCf
     track_points = env.track_points_tensor  # (num_envs, num_track_points, 2)
     track_points_lengths = env.track_points_lengths  # (num_envs,)
 
-    closest_track_points = find_closest_track_points(car_centers, track_points, track_points_lengths)  # (num_envs, 2)
+    closest_track_points = find_closest_point(car_centers, track_points, track_points_lengths)  # (num_envs, 2)
     distances = torch.norm(car_centers - closest_track_points, dim=1)  #
 
     max_distance = MAX_DISTANCE_FROM_LINE
@@ -191,4 +191,210 @@ def turning_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     logger.debug_lazy("Steering angles for turning penalty: %s", lambda: steer)
     logger.debug_lazy("Turning penalty: %s", lambda: penalty)
 
+    return penalty
+
+############ FOR RESET AGENT ############
+
+def reset_agent_distance_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """
+    Total reward for the reset agent, which can be different from the main agent's reward.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+    :param robot_cfg: Configuration for the robot.
+    :type robot_cfg: SceneEntityCfg
+
+    :return: Total reward for the reset agent.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+    logger.debug("Calculating reset agent total reward...")
+
+    car_pos: torch.Tensor = env.unwrapped.current_observation["pos"]  # (N, 2)
+    destination_pos: torch.Tensor = env.unwrapped.current_observation["destination"]  # (N, 2)
+    # Distance from each car to its own destination (diagonal)
+    per_env_distance = torch.norm(car_pos - destination_pos, dim=1)  # (N,)
+
+    prev_dist = env.unwrapped.previous_distance_to_goal
+    skip = env.unwrapped.skip_distance_reward_next
+
+    distance_reward = prev_dist - per_env_distance
+
+    # skip distance reward for envs that just reached the goal to avoid giving a large positive reward on the same step as reaching the goal
+    distance_reward = torch.where(skip, torch.zeros_like(distance_reward), distance_reward)
+
+    env.unwrapped.previous_distance_to_goal = per_env_distance.clone()
+
+    combined_flags = env.unwrapped.reached_goal_flags | env.unwrapped.out_of_bounds_flags
+    env.unwrapped.skip_distance_reward_next = combined_flags.clone()
+
+    logger.debug_lazy("Per-env distance to destination: %s", lambda: per_env_distance)
+    logger.debug_lazy("Reset agent reward: %s", lambda: distance_reward)
+
+    return distance_reward
+
+def combined_heading_distance_reward(env: ManagerBasedRLEnv) -> torch.Tensor: 
+    """
+    Combined reward for the reset agent that takes into account both distance to the destination and heading alignment.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+
+    :return: Combined reward for the reset agent.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+    logger.debug("Calculating combined heading and distance reward...")
+
+    distance_reward = reset_agent_distance_reward(env)
+    heading_reward = heading_alignment_reward(env)
+
+    combined_reward = distance_reward * heading_reward
+
+    logger.debug_lazy("Combined reward: %s", lambda: combined_reward)
+
+    return combined_reward
+
+def get_terminal_bonus(env: ManagerBasedRLEnv, bonus: float) -> torch.Tensor:
+    """
+    Bonus reward given at the end of an episode, for example when the agent reaches the goal.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+    :param bonus: The bonus reward to give.
+    :type bonus: float
+
+    :return: Terminal bonus reward.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+    logger.debug("Calculating terminal bonus...")
+
+    reached_goal_flags = env.unwrapped.reached_goal_flags  # (N,), this is set in the termination function and stored in the env
+
+    # Give bonus to envs that are done
+    rewards = torch.where(reached_goal_flags, torch.tensor(bonus, device=env.device), torch.zeros_like(reached_goal_flags, dtype=torch.float))
+
+    logger.debug_lazy("Reached goal flags: %s", lambda: reached_goal_flags)
+    logger.debug_lazy("Terminal bonus rewards: %s", lambda: rewards)
+
+    if reached_goal_flags.any():
+        logger.debug_lazy("Some envs reached the goal! Reached goal flags: %s", lambda: reached_goal_flags)
+    return rewards
+
+
+def heading_alignment_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """
+    Reward for aligning the car's heading with the direction to the goal.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+
+    :return: Heading alignment reward.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+    logger.debug("Calculating heading alignment reward...")
+
+    # since direction to goal is in the car's local frame, we take the dot product of it with vertical
+    direction_to_goal = env.unwrapped.current_observation["direction_to_goal"]  # (N, 2)
+    vertical_vec = torch.tensor([0.0, -1.0], device=env.device)  # (2,) using [0, -1] because the camera vertical axis points negative
+    # print(f"Heading vec: {heading_vec}, Direction to goal: {direction_to_goal}")
+
+    # Take dot product of the two vectors
+    alignment = F.cosine_similarity(direction_to_goal, vertical_vec.unsqueeze(0), dim=1)  # (N,)
+
+    # normalize the alignment to be between 0 and 1 instead of -1 and 1
+    # alignment = 0.5 * (alignment + 1.0)
+
+    logger.debug_lazy("Heading alignment reward: %s", lambda: alignment)
+    # print(f"Heading alignment reward: {alignment}")
+
+    return alignment
+
+def reset_agent_velocity_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """
+    Reward for the reset agent based on its velocity, encouraging it to move towards the goal.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+    :param max_speed: The maximum speed of the agent for normalization.
+    :type max_speed: float
+    :param asset_cfg: The configuration of the asset for which the velocity is being calculated.
+    :type asset_cfg: SceneEntityCfg
+
+    :return: Velocity reward for the reset agent.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+    logger.debug("Calculating reset agent velocity reward...")
+
+    # Assuming speed is normalized in observation
+    car_speeds = env.unwrapped.current_observation["speed"]  # (N,)
+
+    # if inside goal, make velocity reward so that higher vel gives negative rewrad to encourage the agent to slow down once it reaches the goal
+    inside_goal_flags = env.unwrapped.inside_goal_flags  # (N,), this is set in the termination function and stored in the env
+    velocity_reward = torch.where(inside_goal_flags, -car_speeds, car_speeds)
+
+    return velocity_reward
+
+def turning_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """
+    Penalty for large steering angles, encouraging the reset agent to take smoother turns.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+    :param weight: The weight of the turning penalty.
+    :type weight: float
+
+    :return: Turning penalty for the reset agent.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+    logger.debug("Calculating turning penalty...")
+
+    drive = env.action_manager._terms["drive"]
+    steer = drive._processed_actions[:, 1]  # (N,)
+
+    penalty = -1 * torch.abs(steer) / drive.max_steer # divide by max_steer to normalize
+
+    logger.debug_lazy("Steering angles for turning penalty: %s", lambda: steer)
+    logger.debug_lazy("Turning penalty: %s", lambda: penalty)
+
+    return penalty
+
+
+def distance_to_wall_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """
+    Penalty for being too close to the walls, encouraging the reset agent to stay in the middle of the track.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+
+    :return: Distance to wall penalty for the reset agent.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+    logger.debug("Calculating distance to wall penalty...")
+
+    distance_to_wall = env.unwrapped.current_observation["distance_to_wall_normalized"]  # (N,)
+
+    # Define a threshold distance below which the penalty starts to apply
+    threshold_distance = 0.5  # Adjust this value based on the scale of your environment
+
+    # Calculate penalty as a negative value that increases as distance to wall decreases
+    penalty = torch.where(distance_to_wall < threshold_distance, -1 * (threshold_distance - distance_to_wall), torch.zeros_like(distance_to_wall))
+    penalty = penalty.squeeze(1)
+
+    # check if direction to goal is vertical and if so, do not apply penalty since we are going towards the goal
+    direction_to_goal = env.unwrapped.current_observation["direction_to_goal"]  # (N, 2)
+    vertical_vec = torch.tensor([0.0, -1.0], device=env.device)  # (2,) using [0, -1] because the camera vertical axis points
+    alignment = F.cosine_similarity(direction_to_goal, vertical_vec.unsqueeze(0), dim=1)  # (N,)
+    penalty = torch.where(alignment > 0.8, torch.zeros_like(penalty), penalty)
+
+
+    logger.debug_lazy("Distance to wall: %s", lambda: distance_to_wall)
+    logger.debug_lazy("Distance to wall penalty: %s", lambda: penalty)
+
+    # print(f"Distance to wall: {distance_to_wall}, Penalty: {penalty}")
     return penalty
