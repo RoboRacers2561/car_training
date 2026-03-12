@@ -249,7 +249,7 @@ class ObservationsCfg:
                         params={"asset_cfg": SceneEntityCfg("robot"),},
                         clip=(0.0, 255.0),)
         joint_vel_rel = ObsTerm(func=aligned_robot_vel,
-                                params={"asset_cfg": SceneEntityCfg("robot")},
+                                params={"asset_cfg": SceneEntityCfg("robot"), "normalize": True},
                                 )
 
         def __post_init__(self) -> None:
@@ -304,8 +304,7 @@ class RewardsCfg:
     velocity_rew_term = RewTerm(
         func=velocity_reward,
         params={
-            "robot_cfg": SceneEntityCfg("robot"),
-            "max_speed": 0.75, # TODO: Replace with actual max speed
+            "robot_cfg": SceneEntityCfg("robot")
         },
         weight=1.5,
     )

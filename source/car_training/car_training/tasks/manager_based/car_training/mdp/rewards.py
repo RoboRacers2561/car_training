@@ -79,7 +79,7 @@ def distance_from_center_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCf
     reward = 1.0 - normalized_distances
     return reward
 
-def velocity_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg, max_speed: float) -> torch.Tensor:
+def velocity_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg) -> torch.Tensor:
     """
     Reward for maintaining a high speed.
 
@@ -87,15 +87,13 @@ def velocity_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg, max_speed
     :type env: ManagerBasedRLEnv
     :param robot_cfg: Configuration for the robot to extract its velocity.
     :type robot_cfg: SceneEntityCfg
-    :param max_speed: Maximum speed of the car for normalization.
-    :type max_speed: float
 
     :return: Velocity reward.
     :rtype: torch.Tensor
     """
-    car_vels = aligned_robot_vel(env, robot_cfg)
+    car_vels = aligned_robot_vel(env, robot_cfg, normalize=True)
     car_speeds = torch.norm(car_vels, dim=1)
-    normalized_speeds = car_speeds / max_speed
+    normalized_speeds = car_speeds
     return normalized_speeds
 
 def remains_alive_reward(env: ManagerBasedRLEnv) -> torch.Tensor:

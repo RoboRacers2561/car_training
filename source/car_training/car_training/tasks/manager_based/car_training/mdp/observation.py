@@ -78,11 +78,19 @@ def robot_speed(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, normalize: bo
     Returns:
         torch.Tensor: The speed of the car.
     """
+    logger = get_logger(env)
+
     velocity = robot_vel(env, asset_cfg)  # (N, 2)
     speed = torch.norm(velocity, dim=1)  # (N,)
 
+    if hasattr(env.unwrapped, 'action_driver'):
+        driver = env.unwrapped.action_driver
+        max_throttle = driver.max_throttle
+        if max_throttle != 30:
+            logger.warning(f"Unexpected throttle limits for speed normalization: max_throttle={max_throttle}. Speed normalization may be incorrect.")
+
     if normalize:
-        max_speed = 0.8  # Assuming 20 m/s as a reasonable max speed for normalization
+        max_speed = 0.8  # 0.8 m/s corresponds to 30 rad/s for inside the action space
         speed = speed / max_speed
 
     return speed
@@ -224,13 +232,14 @@ def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEnt
 
     return gray_crops
 
-def aligned_robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+def aligned_robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, normalize: bool) -> torch.Tensor:
     """
     Calculate the car's velocity in the car's local frame, aligned with its heading.
 
     Args:
         env: The environment instance.
         asset_cfg: The configuration of the car asset.
+        normalize: Whether to normalize the velocity.
 
     Returns:
         torch.Tensor: The velocity vector of the car in its local frame.
@@ -239,6 +248,16 @@ def aligned_robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torc
     asset: RigidObject = env.scene[asset_cfg.name]
 
     relative_vel = asset.data.root_com_lin_vel_w[:, :2]  # (N, 2)
+
+    if hasattr(env.unwrapped, 'action_driver'):
+        driver = env.unwrapped.action_driver
+        max_throttle = driver.max_throttle
+        if max_throttle != 30:
+            logger.warning(f"Unexpected throttle limits for speed normalization: max_throttle={max_throttle}. Speed normalization may be incorrect.")
+    if normalize:
+        max_speed = 0.8  # 0.8 m/s corresponds to 30 rad/s for inside the action space
+        relative_vel = relative_vel / max_speed
+
 
     heading = asset.data.heading_w  # (N,)
 
