@@ -17,7 +17,7 @@ class OverheadCameraOpticsParamsCfg:
 
 @configclass
 class OverheadCameraPoseParamsCfg:
-    pos: tuple[float, float, float] = (0.0, 0.0, 9.3) # If the size of the track changes, we need to change the height of the camera too. 
+    pos: tuple[float, float, float] = (0.0, 0.0, 9.4) # If the size of the track changes, we need to change the height of the camera too. 
     rot: tuple[float, float, float, float] = (1.57, 0.0, 0.0, -0.7071)
     convention: str = "opengl"
 
