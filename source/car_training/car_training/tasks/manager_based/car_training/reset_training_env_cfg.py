@@ -340,11 +340,6 @@ class RewardsCfg:
         weight=5.0,
     )
 
-    # combined_heading_distance_reward_term = RewTerm(
-    #     func=combined_heading_distance_reward,
-    #     weight=3.0,
-    # )
-
     heading_alignment_rew = RewTerm(
         func=heading_alignment_reward,
         weight=1.0,
@@ -360,10 +355,10 @@ class RewardsCfg:
         weight=2.0,
     )
 
-    distance_to_wall_penalty_term = RewTerm(
-        func=distance_to_wall_penalty,
-        weight=1.0,
-    )
+    # distance_to_wall_penalty_term = RewTerm(
+    #     func=distance_to_wall_penalty,
+    #     weight=1.0,
+    # )
 
     
 
