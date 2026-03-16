@@ -23,6 +23,8 @@ class LeatherbackInitStateCfg:
     pos: tuple[float, float, float] = (0.0, -3.3, 0.01) # This will also dictate the spawn of the car during NORMAL reset mode. If the size of the track changes, this needs to be updated.
     rot: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)
 
+    pos_reset_agent: tuple[float, float, float] = (0.0, 0.0, 0.01) # This is the spawn of the car during RESET_AGENT reset mode. It can be different from the normal spawn to allow for more focused resets.
+
     # Put your joint defaults here too
     joint_pos: dict[str, float] = {
         "Wheel__Knuckle__Front_Left": 0.0,

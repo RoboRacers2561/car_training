@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Optional
 import logging
 import torch
 import math
+import numpy as np
 
 from PIL import Image
 import omni.usd
@@ -11,6 +12,8 @@ from pxr import UsdGeom
 from isaacsim.core.utils.prims import get_prim_at_path
 
 from isaaclab.envs.mdp import reset_scene_to_default
+from car_training.tasks.manager_based.car_training.mdp.utils.helpers import convert_coords_list
+
 
 
 if TYPE_CHECKING:
@@ -244,3 +247,161 @@ def reset_robot_root_random(
 
     robot.write_root_pose_to_sim(torch.cat([pos, quat], dim=-1), env_ids=env_ids)
     robot.write_root_velocity_to_sim(torch.zeros((n, 6), device=device), env_ids=env_ids)
+
+def choose_rand_point(pts) -> list[float, float]:
+    """
+    Choose a random point from a list of points.
+
+    :param pts: A list of points, where each point is a tuple (x, y).
+    :type pts: list[tuple[float, float]]
+
+    :return: A randomly chosen point from the list.
+    :rtype: list[float, float]
+    """
+    if len(pts) == 0:
+        raise ValueError("No points available to choose from.")
+
+    
+    idx = torch.randint(0, len(pts), (1,)).item()
+    return pts[idx]
+
+def reset_destination_pos(env: ManagerBasedRLEnv, env_ids: torch.Tensor):
+    """
+    Reset the destination position for the specified environments to a random point on the track.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+    :param env_ids: The IDs of the environments to reset.
+    :type env_ids: torch.Tensor
+    """
+    logger = get_logger(env)
+
+    tp_frame = env.unwrapped.track_points  # in to coordinates of the frame
+    if len(tp_frame) == 0:
+        logger.warning("No track points available to reset destination position.")
+        return
+
+    for eid in env_ids.tolist():
+        pts = tp_frame[eid]
+        if len(pts) == 0:
+            logger.warning("No track points available for env %d to reset destination position.", eid)
+            continue
+        
+        random_point_on_track = choose_rand_point(pts)
+        env.unwrapped.destination_pos[eid] = torch.tensor(random_point_on_track, device=env.device)
+        env.unwrapped.destination_yaw_deg[eid] = np.random.uniform(-180, 180)  # random yaw between -180 and 180 degrees
+    # convert destination_pos to world coordinates for setting goal markers
+    camera_width, camera_height = env.get_camera_dimensions()
+    track_dimensions: tuple = env.scene.cfg.ground_plane.ground_plane_params.each_track_size
+    env.unwrapped.destination_pos_world = convert_coords_list(env.destination_pos.cpu().numpy(), track_dimensions, (camera_width, camera_height), image_to_isaaclab=True)
+    env.unwrapped.set_goal_markers(env.destination_pos_world, yaw_deg_tensor=env.destination_yaw_deg) # set goal marker positions and orientations
+
+def reset_robot_root_pose(
+    env,
+    env_ids: torch.Tensor,
+    asset_cfg,
+    position,
+    yaw,
+    zero_velocity: bool = True,
+):
+    """
+    Reset the robot root to a specified position and yaw.
+
+    Parameters
+    ----------
+    env : ManagerBasedRLEnv
+        The environment instance.
+    env_ids : torch.Tensor
+        Environment IDs to reset, shape (N,).
+    asset_cfg : SceneEntityCfg
+        Robot asset config.
+    position : torch.Tensor | list | tuple
+        Either:
+        - single position (3,) applied to all env_ids
+        - per-env positions (N, 3)
+    yaw : float | torch.Tensor
+        Either:
+        - single yaw scalar applied to all env_ids
+        - per-env yaw tensor of shape (N,)
+    zero_velocity : bool
+        If True, resets root linear/angular velocity to zero.
+    """
+    robot = env.scene[asset_cfg.name]
+    device = env.device
+    n = env_ids.numel()
+
+    # ----- position handling -----
+    pos = torch.as_tensor(position, device=device, dtype=torch.float32)
+
+    if pos.ndim == 1:
+        if pos.numel() != 3:
+            raise ValueError(f"Single position must have shape (3,), got {tuple(pos.shape)}")
+        pos = pos.unsqueeze(0).repeat(n, 1)
+    elif pos.ndim == 2:
+        if pos.shape != (n, 3):
+            raise ValueError(f"Per-env positions must have shape ({n}, 3), got {tuple(pos.shape)}")
+    else:
+        raise ValueError(f"Position must have shape (3,) or ({n}, 3), got {tuple(pos.shape)}")
+
+    # ----- yaw handling -----
+    yaw_t = torch.as_tensor(yaw, device=device, dtype=torch.float32)
+
+    if yaw_t.ndim == 0:
+        yaw_t = yaw_t.repeat(n)
+    elif yaw_t.ndim == 1:
+        if yaw_t.shape != (n,):
+            raise ValueError(f"Per-env yaw must have shape ({n},), got {tuple(yaw_t.shape)}")
+    else:
+        raise ValueError(f"Yaw must be scalar or shape ({n},), got {tuple(yaw_t.shape)}")
+
+    # ----- yaw -> quaternion (w, x, y, z) -----
+    half = 0.5 * yaw_t
+    qw = torch.cos(half)
+    qx = torch.zeros_like(qw)
+    qy = torch.zeros_like(qw)
+    qz = torch.sin(half)
+    quat = torch.stack([qw, qx, qy, qz], dim=-1)  # (N, 4)
+
+    # convert position from local to world coordinates
+    origins = env.scene.env_origins[env_ids]  # (N, 3)
+    pos += origins
+
+    # ----- write pose -----
+    root_pose = torch.cat([pos, quat], dim=-1)  # (N, 7)
+    robot.write_root_pose_to_sim(root_pose, env_ids=env_ids)
+
+    # ----- optionally zero velocities -----
+    if zero_velocity:
+        robot.write_root_velocity_to_sim(torch.zeros((n, 6), device=device), env_ids=env_ids)
+
+def reset_robot_root_random_deterministic_mix(
+        env, 
+        env_ids: torch.Tensor,
+        asset_cfg
+):
+    """
+    Reset robot position 50% of time randomly on the track and 50% of time to a corner.
+    """
+    possible_positions_yaws = []
+    max_extent = 4.5
+    points = np.linspace(-max_extent, max_extent, num=10)  # 10 points along each edge
+    for x in points:
+        possible_positions_yaws.append(((x, max_extent, 0.05), torch.pi/2))   # top edge
+        possible_positions_yaws.append(((x, -max_extent, 0.05), 3*torch.pi/2))  # bottom edge
+    for y in points:
+        possible_positions_yaws.append(((-max_extent, y, 0.05), torch.pi))  # left edge
+        possible_positions_yaws.append(((max_extent, y, 0.05), 2*torch.pi))   # right edge
+
+    possible_positions_yaws.append(((-max_extent, max_extent, 0.05), torch.pi))
+    possible_positions_yaws.append(((max_extent, max_extent, 0.05), 2*torch.pi))
+    possible_positions_yaws.append(((-max_extent, -max_extent, 0.05), torch.pi))
+    possible_positions_yaws.append(((max_extent, -max_extent, 0.05), 2*torch.pi))
+
+    random_number = torch.rand((), device=env.device)
+    if random_number < 0.7:  # 70% random on track, 30% corners
+        reset_robot_root_random(env, env_ids, asset_cfg, yaw_noise_std=0.6, xy_rand_radius=0.0)
+    else:
+
+        position_yaw = possible_positions_yaws[torch.randint(0, len(possible_positions_yaws), (1,)).item()]
+        position, yaw = position_yaw
+        reset_robot_root_pose(env, env_ids, asset_cfg, position=position, yaw=yaw)

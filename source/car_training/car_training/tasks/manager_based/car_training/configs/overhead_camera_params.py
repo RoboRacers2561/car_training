@@ -5,7 +5,7 @@ from isaaclab.utils import configclass
 ## NOTE: The settings for the opics is based on the 6mm lens purchased from AMAZON for the FLIR camera.
 @configclass
 class OverheadCameraOpticsParamsCfg:
-    focal_length: float = 0.6 # (in cm) 6mm lens
+    focal_length: float = 0.4 # (in cm) 6mm lens
     focus_distance: float = 40 # (in m) Focus at ground level where the car is. This would not matter if fstop is 0 (no depth of field)
     horizontal_aperture: float = 0.72 # (in cm) This is based on sensor size 1/1.8", which corresponds to horizontal size of 7.2mm and vertical size of 5.4mm
     vertical_aperture: float = 0.54 # (in cm) This is based on sensor size 1/1.8", which corresponds to horizontal size of 7.2mm and vertical size of 5.4mmgoo
@@ -17,7 +17,7 @@ class OverheadCameraOpticsParamsCfg:
 
 @configclass
 class OverheadCameraPoseParamsCfg:
-    pos: tuple[float, float, float] = (0.0, 0.0, 11.2) # If the size of the track changes, we need to change the height of the camera too. 
+    pos: tuple[float, float, float] = (0.0, 0.0, 9.4) # If the size of the track changes, we need to change the height of the camera too. 
     rot: tuple[float, float, float, float] = (1.57, 0.0, 0.0, -0.7071)
     convention: str = "opengl"
 

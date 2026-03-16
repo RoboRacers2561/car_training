@@ -20,7 +20,7 @@ from isaaclab.sensors import TiledCameraCfg
 from isaaclab.actuators import ImplicitActuatorCfg
 
 from . import mdp
-from car_training.tasks.manager_based.car_training.mdp.rewards import get_total_reward
+from car_training.tasks.manager_based.car_training.mdp.rewards import distance_from_center_reward, steering_jerk_penalty, velocity_reward, remains_alive_reward, turning_penalty, collision_penalty
 from car_training.tasks.manager_based.car_training.mdp.observation import  (
     aligned_track_neighborhood_image,
     robot_vel,
@@ -46,7 +46,7 @@ ttr_nano_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tas
 track_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/scene_assets/")
 TRACK_USD_PATHS = []
 for i in range(0, 12):
-    TRACK_USD_PATHS.append(track_usd_path + f"tracks/track_{i}.usd")
+    TRACK_USD_PATHS.append(track_usd_path + f"tracks_thickness_random/track_{i}.usd")
 
 
 ## 
@@ -214,7 +214,7 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
     robot: ArticulationCfg = LEATHERBACK_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
     # overhead camera
-    overhead_camera: OverheadCameraCfg | None = None
+    # overhead_camera: OverheadCameraCfg | None = None
 
     # obstacle
     obstacle_car: ArticulationCfg = LEATHERBACK_CFG.replace(prim_path="{ENV_REGEX_NS}/ObstacleCar")  # another car as obstacle
@@ -256,7 +256,7 @@ class ObservationsCfg:
                         params={"asset_cfg": SceneEntityCfg("robot"), "obstacle_cfg": SceneEntityCfg("obstacle_car")},
                         clip=(0.0, 255.0),)
         joint_vel_rel = ObsTerm(func=aligned_robot_vel,
-                                params={"asset_cfg": SceneEntityCfg("robot")},
+                                params={"asset_cfg": SceneEntityCfg("robot"), "normalize": True},
                                 )
 
         def __post_init__(self) -> None:
@@ -292,14 +292,52 @@ class RewardsCfg:
     """Reward terms for the MDP."""
 
     # Get total reward from mdp.rewards.get_total_reward
-    total_reward = RewTerm(
-        func=get_total_reward,
+    # total_reward = RewTerm(
+    #     func=get_total_reward,
+    #     params={
+    #         "robot_cfg": SceneEntityCfg("robot"),
+    #         "max_speed": 1,    # TODO: Replace with actual max speed
+    #     },
+    #     weight=1.0,
+    # )
+
+    distance_from_center_rew_term = RewTerm(
+        func=distance_from_center_reward,
         params={
             "robot_cfg": SceneEntityCfg("robot"),
-            "max_speed": 2.75,    # TODO: Replace with actual max speed
         },
-        weight=1.0,
+        weight=3.0,
     )
+
+    velocity_rew_term = RewTerm(
+        func=velocity_reward,
+        params={
+            "robot_cfg": SceneEntityCfg("robot")
+        },
+        weight=1.5,
+    )
+
+    remain_alive_rew_term = RewTerm(
+        func=remains_alive_reward,
+        weight=0.2
+        )
+    
+    steer_penalty_term = RewTerm(
+        func=turning_penalty,
+        weight=0.5
+    )
+
+    obstacle_collision_penalty = RewTerm(
+        func=collision_penalty,
+        params={"asset_cfg": SceneEntityCfg("robot"), "obstacle_cfg": SceneEntityCfg("obstacle_car")},
+        weight=10.0
+    )
+        
+    # steering_jerk_penalty_term = RewTerm(
+    #     func=steering_jerk_penalty,
+    #     weight=0.003
+    # )
+
 
 
 @configclass

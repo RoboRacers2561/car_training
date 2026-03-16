@@ -20,7 +20,7 @@ import cv2
 import logging
 import torch.nn.functional as F
 
-from car_training.tasks.manager_based.car_training.mdp.utils.helpers import *
+from car_training.tasks.manager_based.car_training.mdp.utils.helpers import find_closest_point
 from car_training.tasks.manager_based.car_training.mdp.observation import (
     robot_pos,
     aligned_robot_vel,
@@ -31,6 +31,9 @@ from car_training.tasks.manager_based.car_training.mdp.utils.training_logging im
 )
 
 _LOGGER: Optional[GpuSafeLogger] = None
+
+MAX_DISTANCE_FROM_LINE = 40
+
 
 
 def get_logger(env: ManagerBasedRLEnv) -> GpuSafeLogger:
@@ -51,114 +54,60 @@ def get_logger(env: ManagerBasedRLEnv) -> GpuSafeLogger:
         _LOGGER = base.getChild(short_name)
     return _LOGGER
 
-
-def get_total_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg, max_speed: float) -> torch.Tensor:
+def distance_from_center_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg) -> torch.Tensor:
     """
-    Calculate the total reward based on multiple factors.
+    Reward for being close to the center of the track.
 
-    :param completed_laps: Number of laps completed by the car.
-    :type completed_laps: int
-    :param total_laps: Total number of laps in the race.
-    :type total_laps: int
-    :param max_speed: Maximum speed of the car.
-    :type max_speed: float
+    :param env: The environment instance containing the track and robot information.
+    :type env: ManagerBasedRLEnv
+    :param robot_cfg: Configuration for the robot to extract its position.
+    :type robot_cfg: SceneEntityCfg
 
-    :return: Total reward calculated from various factors.
-    :rtype: float
+    :return: Distance from center reward.
+    :rtype: torch.Tensor
     """
-    logger = get_logger(env)
+    car_centers = robot_pos(env, robot_cfg, do_convert_coords=True)
+    track_points = env.track_points_tensor  # (num_envs, num_track_points, 2)
+    track_points_lengths = env.track_points_lengths  # (num_envs,)
 
-    logger.debug("Calculating total reward...")
+    closest_track_points = find_closest_point(car_centers, track_points, track_points_lengths)  # (num_envs, 2)
+    distances = torch.norm(car_centers - closest_track_points, dim=1)  #
 
-    # camera: Articulation = env.scene["overhead_camera"]
+    max_distance = MAX_DISTANCE_FROM_LINE
+    normalized_distances = distances / max_distance
+    # Reward is higher when the distance is smaller
+    reward = 1.0 - normalized_distances
+    return reward
 
-    # rgb = camera.data.output['rgb']
+def velocity_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg) -> torch.Tensor:
+    """
+    Reward for maintaining a high speed.
 
-    # rgb_cpu = rgb.detach().cpu().numpy()
+    :param env: The environment instance containing the robot information.
+    :type env: ManagerBasedRLEnv
+    :param robot_cfg: Configuration for the robot to extract its velocity.
+    :type robot_cfg: SceneEntityCfg
 
-    car_centers = (
-        robot_pos(env, robot_cfg, do_convert_coords=True).detach().cpu().numpy()
-    )
-    # car_vels = robot_vel(env, robot_cfg).detach().cpu().numpy()
-    car_vels = aligned_robot_vel(env, robot_cfg).detach().cpu().numpy()
-    car_speeds = np.linalg.norm(car_vels, axis=1)
+    :return: Velocity reward.
+    :rtype: torch.Tensor
+    """
+    car_vels = aligned_robot_vel(env, robot_cfg, normalize=True)
+    car_speeds = torch.norm(car_vels, dim=1)
+    normalized_speeds = car_speeds
+    return normalized_speeds
 
-    num_envs = car_centers.shape[0]
-    rewards = np.empty((num_envs,), dtype=np.float32)
+def remains_alive_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """
+    Returns a constant reward for remaining alive.
 
-    for i in range(num_envs):
-        # for each copy of the simulation find the track points and compute the reward
-        # frame = rgb_cpu[i]
-        track_points_list = env.unwrapped.track_points[i]
+    :return: Constant reward value.
+    :rtype: torch.Tensor
+    """
+    return torch.ones((env.num_envs,), device=env.device)
 
-        # draw track points for debugging
-        # for point in track_points_list:
-        #     cv2.circle(frame, (int(point[0]), int(point[1])), 3, (0, 255, 0), -1)  # Draw track points in green
-        # cv2.imwrite(f"debug_image_with_track_points_{i}.png", frame)  # Save the image with track points for debugging
-
-        car_center = car_centers[i]
-        car_speed = float(car_speeds[i])
-        # car_heading = robot_heading(env, robot_cfg).cpu().numpy()[index]
-        logger.debug(f"car_speed type: {type(car_speed)}")
-        logger.debug_lazy("car speed %s", lambda: car_speed)
-
-        # draw the velocity vector on the image for debugging
-        # start_point = (int(car_center[0]), int(car_center[1]))
-        # end_point = (int(car_center[0] + car_vels[i][0]*100), int(car_center[1] + car_vels[i][1]*100))
-        # cv2.arrowedLine(frame, start_point, end_point, (255, 0, 0), 2)  # Draw velocity vector in blue
-        # end_point = (int(car_center[0] + 50 * car_heading[0]), int(car_center[1] + 50 * car_heading[1]))
-        # cv2.arrowedLine(frame, start_point, end_point, (255, 0, 0), 2)  # Draw heading vector in blue
-        # cv2.circle(frame, (int(car_center[0]), int(car_center[1])), 5, (0, 255, 0), -1)  # Draw car center in green
-        # cv2.imwrite(f"debug_image_with_velocity_{i}.png", frame)  # Save the image with velocity vector for debugging
-
-        # cropped_image = env.observation_manager.compute_group("policy")["image"]
-        # debug_cropped_image = cropped_image[0, 0].cpu().numpy() * 255
-        # debug_cropped_image = cv2.cvtColor(debug_cropped_image.astype(np.uint8), cv2.COLOR_GRAY2BGR)
-
-        # cv2.arrowedLine(debug_cropped_image, (24, 24), (24 + int(car_vels[i][0]*30), 24 + int(car_vels[i][1]*30)), (255, 0, 0), 2)  # Draw velocity vector in blue
-        # cv2.imwrite(f"debug_cropped_image_with_velocity_{i}.png", debug_cropped_image)  # Save the cropped image with velocity vector for debugging
-
-        # cv2.circle(frame, (int(car_center[0]), int(car_center[1])), 5, (0, 0, 255), -1)  # Draw car center in red
-        # cv2.imwrite(f"debug_image_with_car_center_{i}.png", frame)  # Save the image with car center for debugging
-        # print(f"type of car_center: {type(car_center)}, shape: {car_center.shape}")
-        # print(f"Car center: {car_center}, Car velocity: {car_velocity}, Car speed: {car_speed}")
-
-        # Now compute the reward for each simulation copy
-        distance_reward = distance_from_center_reward(
-            car_center, track_points_list, weight=3.0
-        )
-        # print(f"Distance reward: {distance_reward}")
-        velocity_reward_value = velocity_reward(
-            car_speed, max_speed, weight=1.5)
-        alive_reward = remains_alive_reward(weight=0.2)
-        track_penalty = leaves_track_penalty(
-            car_center, track_points_list, weight=0.5)
-
-        total_reward = (
-            distance_reward + velocity_reward_value + alive_reward - track_penalty
-        )
-
-        rewards[i] = total_reward
-        logger.debug(
-            f"Simulation {i}: Distance Reward: {distance_reward}, Velocity Reward: {velocity_reward_value}, Alive Reward: {alive_reward}, Track Penalty: {track_penalty}, Total Reward: {total_reward}"
-        )
-
-    total_reward_no_smoothing = torch.from_numpy(rewards).to(device=env.device)
-    smooth_steering = steering_jerk_penalty(env, weight=0.003)
-    obstacle_collision_penalty = collision_penalty(env, asset_cfg=SceneEntityCfg("robot"), obstacle_cfg=SceneEntityCfg("obstacle_car"), weight=10.0)
-    total_reward = total_reward_no_smoothing + smooth_steering + obstacle_collision_penalty
-    logger.debug_lazy("Total reward with smooth steering: %s",
-                      lambda: total_reward)
-
-    return total_reward
-
-
-def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.Tensor:
+def steering_jerk_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     """
     Reward for smooth steering by penalizing large changes in steering angle.
-
-    :param weight: Weight of the smooth steering reward.
-    :type weight: float
 
     :return: Smooth steering reward.
     :rtype: torch.Tensor
@@ -179,30 +128,6 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.
         result = F.conv1d(buffer_input, kernel, padding=0)  # (num_envs, 1, buffer_size-2)
         return result.squeeze(1)  # (num_envs, buffer_size-2) 
 
-    # action_now = drive.action_curr
-    # if torch.isnan(action_now).any():
-    #     raise ValueError(
-    #         "Current action contains NaN in steering_jerk_penalty.")
-
-    # Initialize history on first call
-    # if torch.isnan(drive.action_prev).all() and torch.isnan(drive.action_prev2).all():
-    #     logger.debug("Initializing action history for steering jerk penalty.")
-    #     drive.action_prev = action_now.clone()
-    #     drive.action_prev2 = action_now.clone()
-    #     return torch.zeros((env.num_envs,), device=env.device)
-    # elif torch.isnan(drive.action_prev).any() or torch.isnan(drive.action_prev2).any():
-    #     # Not all NaN, but some NaN values exist which is because of reset of some envs
-    #     logger.debug(
-    #         "Partial NaN detected in action history; initializing missing values for steering jerk penalty."
-    #     )
-    #     nan_prev = torch.isnan(drive.action_prev).any(dim=1)
-    #     nan_prev2 = torch.isnan(drive.action_prev2).any(dim=1)
-    #     drive.action_prev[nan_prev] = action_now[nan_prev].clone()
-    #     drive.action_prev2[nan_prev2] = action_now[nan_prev2].clone()
-
-    # steer_now = action_now[:, 1]
-    # steer_prev = drive.action_prev[:, 1]
-    # steer_prev2 = drive.action_prev2[:, 1]
     steer_buffer = drive.action_buffer[:, :, 1]
     
     min_buffer_size = 3
@@ -214,7 +139,7 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.
         return torch.zeros((env.num_envs,), device=env.device)
     # dt is optional; keep if you want rate-invariance
     dt = env.cfg.sim.dt * env.cfg.decimation
-    #j = (steer_now - 2.0 * steer_prev + steer_prev2) / (dt * dt)
+    
     #Updated j with filter 
     j = d2_filter(steer_buffer)/(dt*dt)
 
@@ -229,11 +154,8 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.
     num_valid = mask.sum(dim=1).float().clamp(min=1.0)
     j_rms = torch.sqrt(j_sqr_mask.sum(dim=1) / num_valid)
 
-    penalty = -weight * (j_rms)
+    penalty = -1 * (j_rms)
 
-    # logger.debug_lazy("Steering angles now: %s", lambda: steer_now)
-    # logger.debug_lazy("Steering angles prev: %s", lambda: steer_prev)
-    # logger.debug_lazy("Steering angles prev2: %s", lambda: steer_prev2)
     logger.debug_lazy("Steering angles prev2: %s", lambda: steer_buffer)
     logger.debug_lazy("Decimation: %s", lambda: env.cfg.decimation)
     logger.debug_lazy("Sim dt: %s", lambda: env.cfg.sim.dt)
@@ -241,14 +163,35 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.
     logger.debug_lazy("Steering jerk: %s", lambda: j)
     logger.debug_lazy("Smooth steering reward: %s", lambda: penalty)
 
-    # IMPORTANT: shift history ONCE per RL step (reward is called once per RL step)
-    # drive.action_prev2 = drive.action_prev.clone()
-    # drive.action_prev = action_now.clone()
-
     return penalty
 
 
-def collision_penalty(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, obstacle_cfg: SceneEntityCfg, collision_threshold: float = 20.0, weight: float = 1.0) -> torch.Tensor:
+def turning_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """
+    Penalty for large steering angles, encouraging the reset agent to take smoother turns.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+    :param weight: The weight of the turning penalty.
+    :type weight: float
+
+    :return: Turning penalty for the reset agent.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+    logger.debug("Calculating turning penalty...")
+
+    drive = env.action_manager._terms["drive"]
+    steer = drive._processed_actions[:, 1]  # (N,)
+
+    penalty = -1 * torch.abs(steer) / drive.max_steer # divide by max_steer to normalize
+
+    logger.debug_lazy("Steering angles for turning penalty: %s", lambda: steer)
+    logger.debug_lazy("Turning penalty: %s", lambda: penalty)
+
+    return penalty
+
+def collision_penalty(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, obstacle_cfg: SceneEntityCfg, collision_threshold: float = 20.0) -> torch.Tensor:
     """
     Placeholder collision penalty function that currently returns zero for all environments.
 
@@ -272,6 +215,176 @@ def collision_penalty(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, obstacl
     logger.debug_lazy("Collision flags: %s", lambda: collision_flags)
     logger.debug_lazy("Collision penalty: %s", lambda: penalty)
 
-    penalty = -weight * penalty
+    penalty = -1 * penalty
     return penalty 
 
+
+############ FOR RESET AGENT ############
+
+def reset_agent_distance_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """
+    Total reward for the reset agent, which can be different from the main agent's reward.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+    :param robot_cfg: Configuration for the robot.
+    :type robot_cfg: SceneEntityCfg
+
+    :return: Total reward for the reset agent.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+    logger.debug("Calculating reset agent total reward...")
+
+    car_pos: torch.Tensor = env.unwrapped.current_observation["pos"]  # (N, 2)
+    destination_pos: torch.Tensor = env.unwrapped.current_observation["destination"]  # (N, 2)
+    # Distance from each car to its own destination (diagonal)
+    per_env_distance = torch.norm(car_pos - destination_pos, dim=1)  # (N,)
+
+    prev_dist = env.unwrapped.previous_distance_to_goal
+    skip = env.unwrapped.skip_distance_reward_next
+
+    distance_reward = prev_dist - per_env_distance
+
+    # skip distance reward for envs that just reached the goal to avoid giving a large positive reward on the same step as reaching the goal
+    distance_reward = torch.where(skip, torch.zeros_like(distance_reward), distance_reward)
+
+    env.unwrapped.previous_distance_to_goal = per_env_distance.clone()
+
+    combined_flags = env.unwrapped.reached_goal_flags | env.unwrapped.out_of_bounds_flags
+    env.unwrapped.skip_distance_reward_next = combined_flags.clone()
+
+    logger.debug_lazy("Per-env distance to destination: %s", lambda: per_env_distance)
+    logger.debug_lazy("Reset agent reward: %s", lambda: distance_reward)
+
+    return distance_reward
+
+def combined_heading_distance_reward(env: ManagerBasedRLEnv) -> torch.Tensor: 
+    """
+    Combined reward for the reset agent that takes into account both distance to the destination and heading alignment.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+
+    :return: Combined reward for the reset agent.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+    logger.debug("Calculating combined heading and distance reward...")
+
+    distance_reward = reset_agent_distance_reward(env)
+    heading_reward = heading_alignment_reward(env)
+
+    combined_reward = distance_reward * heading_reward
+
+    logger.debug_lazy("Combined reward: %s", lambda: combined_reward)
+
+    return combined_reward
+
+def get_terminal_bonus(env: ManagerBasedRLEnv, bonus: float) -> torch.Tensor:
+    """
+    Bonus reward given at the end of an episode, for example when the agent reaches the goal.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+    :param bonus: The bonus reward to give.
+    :type bonus: float
+
+    :return: Terminal bonus reward.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+    logger.debug("Calculating terminal bonus...")
+
+    reached_goal_flags = env.unwrapped.reached_goal_flags  # (N,), this is set in the termination function and stored in the env
+
+    # Give bonus to envs that are done
+    rewards = torch.where(reached_goal_flags, torch.tensor(bonus, device=env.device), torch.zeros_like(reached_goal_flags, dtype=torch.float))
+
+    logger.debug_lazy("Reached goal flags: %s", lambda: reached_goal_flags)
+    logger.debug_lazy("Terminal bonus rewards: %s", lambda: rewards)
+
+    if reached_goal_flags.any():
+        logger.debug_lazy("Some envs reached the goal! Reached goal flags: %s", lambda: reached_goal_flags)
+    return rewards
+
+
+def heading_alignment_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """
+    Reward for aligning the car's heading with the direction to the goal.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+
+    :return: Heading alignment reward.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+    logger.debug("Calculating heading alignment reward...")
+
+    # since direction to goal is in the car's local frame, we take the dot product of it with vertical
+    direction_to_goal = env.unwrapped.current_observation["direction_to_goal"]  # (N, 2)
+    vertical_vec = torch.tensor([0.0, -1.0], device=env.device)  # (2,) using [0, -1] because the camera vertical axis points negative
+    # print(f"Heading vec: {heading_vec}, Direction to goal: {direction_to_goal}")
+
+    # Take dot product of the two vectors
+    alignment = F.cosine_similarity(direction_to_goal, vertical_vec.unsqueeze(0), dim=1)  # (N,)
+
+    # normalize the alignment to be between 0 and 1 instead of -1 and 1
+    # alignment = 0.5 * (alignment + 1.0)
+
+    logger.debug_lazy("Heading alignment reward: %s", lambda: alignment)
+    # print(f"Heading alignment reward: {alignment}")
+
+    return alignment
+
+def reset_agent_velocity_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """
+    Reward for the reset agent based on its velocity, encouraging it to move towards the goal.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+    :param max_speed: The maximum speed of the agent for normalization.
+    :type max_speed: float
+    :param asset_cfg: The configuration of the asset for which the velocity is being calculated.
+    :type asset_cfg: SceneEntityCfg
+
+    :return: Velocity reward for the reset agent.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+    logger.debug("Calculating reset agent velocity reward...")
+
+    # Assuming speed is normalized in observation
+    car_speeds = env.unwrapped.current_observation["speed"]  # (N,)
+
+    # if inside goal, make velocity reward so that higher vel gives negative rewrad to encourage the agent to slow down once it reaches the goal
+    inside_goal_flags = env.unwrapped.inside_goal_flags  # (N,), this is set in the termination function and stored in the env
+    velocity_reward = torch.where(inside_goal_flags, -car_speeds, car_speeds)
+
+    return velocity_reward
+
+def turning_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """
+    Penalty for large steering angles, encouraging the reset agent to take smoother turns.
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+    :param weight: The weight of the turning penalty.
+    :type weight: float
+
+    :return: Turning penalty for the reset agent.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+    logger.debug("Calculating turning penalty...")
+
+    drive = env.action_manager._terms["drive"]
+    steer = drive._processed_actions[:, 1]  # (N,)
+
+    penalty = -1 * torch.abs(steer) / drive.max_steer # divide by max_steer to normalize
+
+    logger.debug_lazy("Steering angles for turning penalty: %s", lambda: steer)
+    logger.debug_lazy("Turning penalty: %s", lambda: penalty)
+
+    return penalty

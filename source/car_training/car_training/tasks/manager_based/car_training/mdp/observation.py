@@ -16,7 +16,7 @@ import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 import numpy as np
 from isaaclab.assets import RigidObject
-from car_training.tasks.manager_based.car_training.mdp.utils.helpers import convert_coords, rotate_torch_image
+from car_training.tasks.manager_based.car_training.mdp.utils.helpers import convert_coords, find_closest_point
 from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import GpuSafeLogger
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
@@ -67,6 +67,34 @@ def robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor
     logger.debug_lazy("Car velocities: %s", lambda: relative_vel)
     return relative_vel
 
+def robot_speed(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, normalize: bool = False) -> torch.Tensor:
+    """
+    Calculate the speed of the car.
+
+    Args:
+        env: The environment instance.
+        asset_cfg: The configuration of the car asset.
+
+    Returns:
+        torch.Tensor: The speed of the car.
+    """
+    logger = get_logger(env)
+
+    velocity = robot_vel(env, asset_cfg)  # (N, 2)
+    speed = torch.norm(velocity, dim=1)  # (N,)
+
+    if hasattr(env.unwrapped, 'action_driver'):
+        driver = env.unwrapped.action_driver
+        max_throttle = driver.max_throttle
+        if max_throttle != 30:
+            logger.warning(f"Unexpected throttle limits for speed normalization: max_throttle={max_throttle}. Speed normalization may be incorrect.")
+
+    if normalize:
+        max_speed = 0.8  # 0.8 m/s corresponds to 30 rad/s for inside the action space
+        speed = speed / max_speed
+
+    return speed
+
 def robot_heading(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
 
     logger = get_logger(env)
@@ -102,31 +130,6 @@ def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, do_convert_coor
         relative_pos = convert_coords(relative_pos, track_size, (camera_width, camera_height))
         logger.debug_lazy("Car image positions: %s", lambda: relative_pos)
     return relative_pos[:, :2]  # Return x, y position
-
-def forward_speed(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
-    """
-    Calculate the forward speed of the car.
-
-    Args:
-        env: The environment instance.
-        asset_cfg: The configuration of the car asset.
-
-    Returns:
-        torch.Tensor: The forward speed of the car.
-    """
-    logger = get_logger(env)
-    asset: RigidObject = env.scene[asset_cfg.name]
-
-    heading = asset.data.heading_w  # (num_envs,)
-    lin_vel = asset.data.root_com_lin_vel_w  # (num_envs, 3)
-
-    heading_vector = torch.stack((torch.cos(heading), torch.sin(heading), torch.zeros_like(heading)), dim=-1)  # (num_envs, 3)
-
-    forward_speed = torch.sum(lin_vel * heading_vector, dim=-1)  # (num_envs,)
-    logger.debug_lazy("Car forward speeds: %s", lambda: forward_speed)
-    # print speed of env 0 for debugging
-    print(f"Car forward speed env 0: {forward_speed[0].item()}")
-    return forward_speed
 
 
 
@@ -364,13 +367,14 @@ def aligned_obstacle_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, ob
     return blank_image
 
 
-def aligned_robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+def aligned_robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, normalize: bool) -> torch.Tensor:
     """
     Calculate the car's velocity in the car's local frame, aligned with its heading.
 
     Args:
         env: The environment instance.
         asset_cfg: The configuration of the car asset.
+        normalize: Whether to normalize the velocity.
 
     Returns:
         torch.Tensor: The velocity vector of the car in its local frame.
@@ -379,6 +383,16 @@ def aligned_robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torc
     asset: RigidObject = env.scene[asset_cfg.name]
 
     relative_vel = asset.data.root_com_lin_vel_w[:, :2]  # (N, 2)
+
+    if hasattr(env.unwrapped, 'action_driver'):
+        driver = env.unwrapped.action_driver
+        max_throttle = driver.max_throttle
+        if max_throttle != 30:
+            logger.warning(f"Unexpected throttle limits for speed normalization: max_throttle={max_throttle}. Speed normalization may be incorrect.")
+    if normalize:
+        max_speed = 0.8  # 0.8 m/s corresponds to 30 rad/s for inside the action space
+        relative_vel = relative_vel / max_speed
+
 
     heading = asset.data.heading_w  # (N,)
 
@@ -418,3 +432,163 @@ def front_wheels_angle(env: ManagerBasedRLEnv) -> torch.Tensor:
     logger.debug_lazy("Front left wheel angle: %s", lambda: front_left_angle)
 
     return front_right_angle, front_left_angle
+
+
+# Below are methods for reset agent training
+
+def get_reset_agent_observation(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """
+    Get the observation for the reset agent, which consists of the car's position and heading frame coordinates
+
+    :param env: The environment instance.
+    :type env: ManagerBasedRLEnv
+    :param robot_asset_cfg: The configuration of the robot asset.
+    :type robot_asset_cfg: SceneEntityCfg
+
+    :return: A tensor containing the car's (x, y) position and heading angle.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+    image_width, image_height = env.unwrapped.get_camera_dimensions()
+
+    pos = robot_pos(env, asset_cfg, do_convert_coords=True)  # (N, 2)
+    heading = robot_heading(env, asset_cfg)  # (N, 2)
+    heading_angle_to_vertical = -torch.atan2(heading[:, 0], -heading[:, 1]) 
+    
+    speed = robot_speed(env, asset_cfg, normalize=True)  # (N,)
+
+    if not hasattr(env.unwrapped, 'destination_pos'):
+        destination = torch.zeros((env.unwrapped.num_envs, 2), device=pos.device)  # (N, 2)
+    else:
+        destination = env.unwrapped.destination_pos  # (N, 2)
+
+
+    vec_to_goal = destination - pos  # (N, 2)
+    vec_to_goal = rotate_vector(vec_to_goal, heading_angle_to_vertical) 
+
+    distance_to_goal = torch.norm(vec_to_goal, dim=1, keepdim=True)  # (N, 1)
+    direction_to_goal = vec_to_goal / (distance_to_goal + 1e-8)  # (N, 2)
+
+    distance_to_goal_normalized = distance_to_goal / torch.norm(torch.tensor([float(image_width), float(image_height)], device=distance_to_goal.device))  # (N, 1)
+
+    angle_of_vec_to_goal_with_vertical = torch.atan2(direction_to_goal[:, 0], -direction_to_goal[:, 1])  # (N,)
+
+    if hasattr(env.unwrapped, 'yellow_walls_tensor') and env.unwrapped.yellow_walls_tensor.numel() > 0:
+        closest_yellow_wall_point = find_closest_point(pos, env.unwrapped.yellow_walls_tensor, env.unwrapped.yellow_walls_lengths)  # (N, 2)
+        vec_to_wall = closest_yellow_wall_point - pos  # (N, 2)
+        vec_to_wall = rotate_vector(vec_to_wall, heading_angle_to_vertical)
+        distance_to_wall = torch.norm(vec_to_wall, dim=1, keepdim=True)  # (N, 1)
+        distance_to_wall_normalized = distance_to_wall / torch.norm(torch.tensor([float(image_width), float(image_height)], device=distance_to_wall.device))  # (N, 1)
+        vec_to_wall_normalized = vec_to_wall / (torch.norm(vec_to_wall, dim=1, keepdim=True) + 1e-8)  # (N, 2)
+    else:
+        vec_to_wall_normalized = torch.zeros((pos.shape[0], 2), device=pos.device)  # (N, 2)
+        distance_to_wall_normalized = torch.zeros((pos.shape[0], 1), device=pos.device)  # (N, 1)
+    
+    observation = torch.cat((speed.unsqueeze(-1), distance_to_goal_normalized, direction_to_goal, angle_of_vec_to_goal_with_vertical.unsqueeze(-1), vec_to_wall_normalized, distance_to_wall_normalized), dim=-1)  # (N, 2 + 2 + 2 + 2 + 1 + 2 + 1) = (N, 12)
+
+    logger.debug_lazy("Reset agent observation: %s", lambda: observation)
+
+    # try:
+    #     print(f"episode reward sum: ", env.reward_manager._episode_sums)
+    #     # reward_sum = 0
+    #     # for reward_term in env.reward_manager._episode_sums.keys():
+    #     #     reward_sum += env.reward_manager._episode_sums[reward_term]
+    #     # print(f"episode reward sum by summing terms: ", reward_sum)
+    #     # print(f"bonus reward: ", env.reward_manager._episode_sums["terminal_bonus"])
+    # except Exception as e:
+    #     pass
+    
+    # # for debugging, get the camera image
+    # if hasattr(env.unwrapped, 'static_track_image') and env.unwrapped.static_track_image is not None:
+    #     for env_index in range(env.unwrapped.num_envs):
+
+    #         camera_img = env.unwrapped.static_track_image  # (N, H, W, 3)
+    #         env_image = camera_img[env_index].cpu().numpy()
+
+    #         # draw position and destination on the image for debugging
+    #         pos_coords = (int(pos[env_index, 0].item()), int(pos[env_index, 1].item()))
+    #         dest_coords = (int(destination[env_index, 0].item()), int(destination[env_index, 1].item()))
+    #         heading_vector = (int(heading[env_index, 0].item() * 10), int(heading[env_index, 1].item() * 10)) # scale for visibility
+    #         cv2.arrowedLine(env_image, pos_coords, (pos_coords[0] + heading_vector[0], pos_coords[1] + heading_vector[1]), color=(255, 0, 0), thickness=2) # blue for heading
+            
+    #         # draw position and destination on the image for debugging
+    #         cv2.circle(env_image, pos_coords, radius=5, color=(0, 255, 0), thickness=2)  # green for position
+    #         cv2.circle(env_image, dest_coords, radius=5, color=(0, 0, 255), thickness=2)  # red for destination
+
+    #         # draw direction to goal
+    #         direction_vector = (int(direction_to_goal[env_index, 0].item() * 10), int(direction_to_goal[env_index, 1].item() * 10))
+    #         cv2.arrowedLine(env_image, pos_coords, (pos_coords[0] + direction_vector[0], pos_coords[1] + direction_vector[1]), color=(255, 255, 0), thickness=2) # cyan for direction to goal
+            
+    #         # write distance to goal on the image
+    #         cv2.putText(env_image, f"{distance_to_goal[env_index].item():.2f}", (pos_coords[0] + 10, pos_coords[1] + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+    #         cv2.imwrite(f"debug_reset_agent_observation_{env_index}.png", env_image)
+
+    # make a white image of the same size as the image and draw the vec to goal on it for debugging
+    # for env_index in range(env.unwrapped.num_envs):
+    #     debug_img = np.ones((384, 512, 3), dtype=np.uint8) * 255
+        
+    #     # draw direction to goal
+    #     direction_vector = (int(direction_to_goal[env_index, 0].item() * 10), int(direction_to_goal[env_index, 1].item() * 10))
+    #     cv2.arrowedLine(debug_img, (256, 192), (256 + direction_vector[0], 192 + direction_vector[1]), color=(255, 0, 0), thickness=2) # blue for direction to goal
+
+    #     direction_vector_wall = (int(vec_to_wall_normalized[env_index, 0].item() * 10), int(vec_to_wall_normalized[env_index, 1].item() * 10))
+    #     cv2.arrowedLine(debug_img, (256, 192), (256 + direction_vector_wall[0], 192 + direction_vector_wall[1]), color=(0, 255, 0), thickness=2) # green for direction to wall
+
+    #     # write speed on the image
+    #     cv2.putText(debug_img, f"Speed: {observation[env_index, 0].item():.2f}", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+    #     # write distance to goal on the image
+    #     cv2.putText(debug_img, f"Distance to goal: {observation[env_index, 1].item():.2f}", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+    #     # write angle to goal on the image
+    #     cv2.putText(debug_img, f"Angle to goal: {observation[env_index, 4].item():.2f}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+    #     # write distance to wall on the image
+    #     cv2.putText(debug_img, f"Distance to wall: {distance_to_wall_normalized[env_index, 0].item():.2f}", (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+    #     cv2.imwrite(f"debug_reset_agent_observation_vec_to_goal_{env_index}.png", debug_img)
+
+    env.unwrapped.current_observation = {
+        "pos": pos.clone(),
+        "heading": heading.clone(),
+        "speed": speed.clone(),
+        "destination": destination.clone(),
+        "distance_to_goal": distance_to_goal.clone(),
+        "distance_to_goal_normalized": distance_to_goal_normalized.clone(),
+        "direction_to_goal": direction_to_goal.clone(),
+        "distance_to_wall_normalized": distance_to_wall_normalized.clone(),
+        "angle_of_vec_to_goal_with_vertical": angle_of_vec_to_goal_with_vertical.clone(),
+    }
+    return observation
+
+def angle_between(a: torch.Tensor, b: torch.Tensor):
+    # a, b shape: (N, 2)
+
+    dot = (a * b).sum(dim=1)                 # (N,)
+    cross = a[:, 0] * b[:, 1] - a[:, 1] * b[:, 0]  # scalar 2D cross product (N,)
+
+    angle = torch.atan2(torch.abs(cross), dot)  # radians in [0, pi]
+    return angle
+
+
+def rotate_vector(vec: torch.Tensor, angle: torch.Tensor) -> torch.Tensor:
+    """
+    Rotate a 2D vector by a given angle.
+
+    Args:
+        vec: A tensor of shape (N, 2) representing the vectors to rotate.
+        angle: A tensor of shape (N,) representing the rotation angles in radians.
+
+    Returns:
+        A tensor of shape (N, 2) representing the rotated vectors.
+    """
+    cos = torch.cos(angle).view(-1, 1)  # (N, 1)
+    sin = torch.sin(angle).view(-1, 1)  # (N, 1)
+
+    rot_matrix = torch.cat(
+        [
+            torch.cat([cos, -sin], dim=-1).unsqueeze(-2),  # (N, 1, 2)
+            torch.cat([sin, cos], dim=-1).unsqueeze(-2),   # (N, 1, 2)
+        ],
+        dim=-2,
+    )  # (N, 2, 2)
+
+    rotated_vec = torch.bmm(rot_matrix, vec.unsqueeze(-1)).squeeze(-1)  # (N, 2)
+    return rotated_vec
