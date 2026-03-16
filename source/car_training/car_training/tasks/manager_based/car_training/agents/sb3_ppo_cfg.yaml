@@ -16,8 +16,6 @@ policy_kwargs:
   net_arch: {'pi': [64, 64], 'vf': [64, 64]}
   squash_output: False
 vf_coef: 1.0
-use_sde: True
-sde_sample_freq: 4
 max_grad_norm: 1.0
 device: "cuda:0"
 use_sde: True
