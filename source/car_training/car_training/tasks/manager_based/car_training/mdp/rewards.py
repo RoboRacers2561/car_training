@@ -268,13 +268,13 @@ def collision_penalty(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, obstacl
 
     # Penalize distcances below the collision threshold + 5 pixels to reduce sparsity of the reward signal
 
-    penalty = torch.zeros_like(distances)
-    penalty_mask = distances < (collision_threshold + 5.0)
-    penalty[penalty_mask] = 1.0 - (distances[penalty_mask] / (collision_threshold + 5.0))
+    # penalty = torch.zeros_like(distances)
+    # penalty_mask = distances < (collision_threshold + 5.0)
+    # penalty[penalty_mask] = 1.0 - (distances[penalty_mask] / (collision_threshold + 5.0))
 
-    # Old binary penalty
-    #collision_flags = distances < collision_threshold
-    #penalty = torch.where(collision_flags, torch.tensor(1.0, device=env.device), torch.tensor(0.0, device=env.device))
+    # Old binary penalty (works still, other one untested)
+    collision_flags = distances < collision_threshold
+    penalty = torch.where(collision_flags, torch.tensor(1.0, device=env.device), torch.tensor(0.0, device=env.device))
 
     logger.debug_lazy("Collision penalty: %s", lambda: penalty)
 
