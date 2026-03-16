@@ -330,7 +330,7 @@ class RewardsCfg:
     obstacle_collision_penalty = RewTerm(
         func=collision_penalty,
         params={"asset_cfg": SceneEntityCfg("robot"), "obstacle_cfg": SceneEntityCfg("obstacle_car")},
-        weight=10.0
+        weight=3.0
     )
         
     # steering_jerk_penalty_term = RewTerm(

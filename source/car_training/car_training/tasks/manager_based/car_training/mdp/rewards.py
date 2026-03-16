@@ -193,7 +193,7 @@ def turning_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
 
 def collision_penalty(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, obstacle_cfg: SceneEntityCfg, collision_threshold: float = 20.0) -> torch.Tensor:
     """
-    Placeholder collision penalty function that currently returns zero for all environments.
+    Collision penalty function that currently returns zero for all environments.
 
     :return: Collision penalty (currently zero).
     :rtype: torch.Tensor
@@ -209,10 +209,16 @@ def collision_penalty(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, obstacl
     # Compute distance between robot and obstacle
     distances = torch.norm(robot_positions - obstacle_positions, dim=1)  # (N,)
 
+    # Penalize distcances below the collision threshold + 5 pixels to reduce sparsity of the reward signal
+
+    # penalty = torch.zeros_like(distances)
+    # penalty_mask = distances < (collision_threshold + 5.0)
+    # penalty[penalty_mask] = 1.0 - (distances[penalty_mask] / (collision_threshold + 5.0))
+
+    # Old binary penalty (works still, other one untested)
     collision_flags = distances < collision_threshold
     penalty = torch.where(collision_flags, torch.tensor(1.0, device=env.device), torch.tensor(0.0, device=env.device))
 
-    logger.debug_lazy("Collision flags: %s", lambda: collision_flags)
     logger.debug_lazy("Collision penalty: %s", lambda: penalty)
 
     penalty = -1 * penalty

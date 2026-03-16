@@ -143,6 +143,7 @@ def reset_robot_root_random(
     yaw_noise_std=0.2,     # radians, e.g. 0.2 ~= 11.5 degrees
     lookahead=5,           # how many points ahead to compute tangent
     xy_rand_radius=0.05,   # random offset radius in XY plane
+    top_half_only=False,      # whether to only sample from the top half of the track (for obstacles)
 ):
     """
     Reset the robot's root position and orientation to a random location along the track. The robot 
@@ -184,6 +185,9 @@ def reset_robot_root_random(
 
     for k, eid in enumerate(env_ids.tolist()):
         pts = tp_local[eid]
+        # if top half only, exclude points with y < 0
+        if top_half_only:
+            pts = [point for point in pts if float(point[1]) >= 0.0]
         if len(pts) < 2:
             raise RuntimeError("Not enough track points to reset robot position.")
         else:
