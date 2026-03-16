@@ -83,6 +83,9 @@ class CarTrainingEnv(ManagerBasedRLEnv):
                 self.static_track_image = init_static_track_image(self, camera_name="overhead_camera")
                 self._static_track_inited = True
                 self.logger.info("Static track image initialized.")
+
+                # save static track image as a .pt file
+                # torch.save(self.static_track_image.cpu(), f"{ASSET_FOLDER}/scene_assets/static_track_image_12_env.pt")
             else:
                 # use torch.load to load pre-saved static track image
                 self.static_track_image: torch.Tensor = torch.load(f"{ASSET_FOLDER}/scene_assets/static_track_image_12_env.pt").to(self.device)

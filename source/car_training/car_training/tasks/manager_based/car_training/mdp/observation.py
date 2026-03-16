@@ -231,8 +231,8 @@ def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEnt
     # print(f"track neighborhood image shape: {gray_crops.shape}")
 
     #save debug image
-    debug_img = gray_crops[0, 0].cpu().numpy() * 255
-    cv2.imwrite("debug_track_neighborhood_image.png", debug_img)
+    # debug_img = gray_crops[0, 0].cpu().numpy() * 255
+    # cv2.imwrite("debug_track_neighborhood_image.png", debug_img)
 
     return gray_crops # (N, 1, crop, crop)
 
@@ -358,8 +358,8 @@ def aligned_obstacle_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, ob
     logger.debug("Obtained aligned obstacle images.")
 
     # save debug image
-    debug_img = crops[0, 0].cpu().numpy() * 255
-    cv2.imwrite("debug_aligned_obstacle_image.png", debug_img)
+    # debug_img = crops[0, 0].cpu().numpy() * 255
+    # cv2.imwrite("debug_aligned_obstacle_image.png", debug_img)
 
     return crops
 
