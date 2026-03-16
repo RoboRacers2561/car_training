@@ -132,7 +132,7 @@ def get_total_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg, max_spee
             car_speed, max_speed, weight=1.5)
         alive_reward = remains_alive_reward(weight=0.2)
         track_penalty = leaves_track_penalty(
-            car_center, track_points_list, weight=0.5)
+            car_center, track_points_list, weight=0.6)
 
         total_reward = (
             distance_reward + velocity_reward_value + alive_reward - track_penalty
@@ -145,7 +145,7 @@ def get_total_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg, max_spee
 
     total_reward_no_smoothing = torch.from_numpy(rewards).to(device=env.device)
     smooth_steering = steering_jerk_penalty(env, weight=0.003)
-    obstacle_collision_penalty = collision_penalty(env, asset_cfg=SceneEntityCfg("robot"), obstacle_cfg=SceneEntityCfg("obstacle_car"), weight=10.0)
+    obstacle_collision_penalty = collision_penalty(env, asset_cfg=SceneEntityCfg("robot"), obstacle_cfg=SceneEntityCfg("obstacle_car"), weight=3.0)
     total_reward = total_reward_no_smoothing + smooth_steering + obstacle_collision_penalty
     logger.debug_lazy("Total reward with smooth steering: %s",
                       lambda: total_reward)
@@ -250,7 +250,7 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv, weight: float = 0.1) -> torch.
 
 def collision_penalty(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, obstacle_cfg: SceneEntityCfg, collision_threshold: float = 20.0, weight: float = 1.0) -> torch.Tensor:
     """
-    Placeholder collision penalty function that currently returns zero for all environments.
+    Collision penalty function that currently returns zero for all environments.
 
     :return: Collision penalty (currently zero).
     :rtype: torch.Tensor
@@ -266,10 +266,16 @@ def collision_penalty(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, obstacl
     # Compute distance between robot and obstacle
     distances = torch.norm(robot_positions - obstacle_positions, dim=1)  # (N,)
 
-    collision_flags = distances < collision_threshold
-    penalty = torch.where(collision_flags, torch.tensor(1.0, device=env.device), torch.tensor(0.0, device=env.device))
+    # Penalize distcances below the collision threshold + 5 pixels to reduce sparsity of the reward signal
 
-    logger.debug_lazy("Collision flags: %s", lambda: collision_flags)
+    penalty = torch.zeros_like(distances)
+    penalty_mask = distances < (collision_threshold + 5.0)
+    penalty[penalty_mask] = 1.0 - (distances[penalty_mask] / (collision_threshold + 5.0))
+
+    # Old binary penalty
+    #collision_flags = distances < collision_threshold
+    #penalty = torch.where(collision_flags, torch.tensor(1.0, device=env.device), torch.tensor(0.0, device=env.device))
+
     logger.debug_lazy("Collision penalty: %s", lambda: penalty)
 
     penalty = -weight * penalty

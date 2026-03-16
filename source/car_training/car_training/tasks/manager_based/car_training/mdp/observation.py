@@ -130,7 +130,7 @@ def forward_speed(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Te
 
 
 
-def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, hide_previous_track: bool = True) -> torch.Tensor:
     """
     Get the track neighborhood image rotated and aligned with the car's heading.
     The car's heading will always point towards the top of the image.
@@ -214,6 +214,10 @@ def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEnt
 
     gray_crops = (gray_crops > 0.5).float()
     # log the shape of gray crops
+
+    # If hide_previous_track is true, the bottom half of the image is whited out
+    if hide_previous_track:
+        gray_crops[:, :, CROPPED_IMAGE_SIZE//2:, :] = 1.0
 
     logger.debug("Obtained track neighborhood images.")
     logger.debug_lazy("Track neighborhood image shape: %s", lambda: list(gray_crops.shape))

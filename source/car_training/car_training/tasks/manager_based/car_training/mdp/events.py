@@ -140,7 +140,7 @@ def reset_robot_root_random(
     yaw_noise_std=0.2,     # radians, e.g. 0.2 ~= 11.5 degrees
     lookahead=5,           # how many points ahead to compute tangent
     xy_rand_radius=0.05,   # random offset radius in XY plane
-    top_half_only=True,      # whether to only sample from the top half of the track (for obstacles)
+    top_half_only=False,      # whether to only sample from the top half of the track (for obstacles)
 ):
     """
     Reset the robot's root position and orientation to a random location along the track. The robot 
