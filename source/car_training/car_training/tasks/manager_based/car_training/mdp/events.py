@@ -13,6 +13,7 @@ from isaacsim.core.utils.prims import get_prim_at_path
 
 from isaaclab.envs.mdp import reset_scene_to_default
 from car_training.tasks.manager_based.car_training.mdp.utils.helpers import convert_coords_list
+from car_training.tasks.manager_based.car_training.mdp.observation import robot_pos
 
 
 
@@ -409,3 +410,29 @@ def reset_robot_root_random_deterministic_mix(
         position_yaw = possible_positions_yaws[torch.randint(0, len(possible_positions_yaws), (1,)).item()]
         position, yaw = position_yaw
         reset_robot_root_pose(env, env_ids, asset_cfg, position=position, yaw=yaw)
+
+
+def reset_random_action_car(env: ManagerBasedRLEnv, env_ids: torch.Tensor, asset_cfg: SceneEntityCfg):
+    """
+    Reset the random-action car to the center of the track with random yaw.
+    This runs the reset only if the obstacle has escaped the environment bounds
+    It is called every 20 steps in the manager
+
+    Parameters    ----------
+    env : ManagerBasedRLEnv
+        The environment instance.
+    env_ids : torch.Tensor
+        Environment IDs to reset, shape (N,).
+    asset_cfg : SceneEntityCfg
+        Robot asset config. 
+    """
+
+    # check if obstacle is out of bounds (e.g. more than 5 units away from origin in x or y)
+    car_positions = robot_pos(env, asset_cfg, do_convert_coords=False)  # (N, 3)
+    out_of_bounds = torch.any(torch.abs(car_positions) > 5, dim=1)  # (N,)
+
+    # reset the positions of obstacles that are out of bounds
+    if torch.any(out_of_bounds):
+        env_ids_to_reset = torch.nonzero(out_of_bounds, as_tuple=False).squeeze(1)
+        env_ids_to_reset = env_ids[env_ids_to_reset]  # map back to original env IDs
+        reset_robot_root_random(env, env_ids_to_reset, asset_cfg, yaw_noise_std=0.6, xy_rand_radius=0.0)

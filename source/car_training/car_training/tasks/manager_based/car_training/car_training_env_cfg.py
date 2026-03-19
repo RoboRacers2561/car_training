@@ -33,7 +33,7 @@ from car_training.tasks.manager_based.car_training.configs.leatherback_params im
 from car_training.tasks.manager_based.car_training.configs.ttr_params import TTRNanoParamsCfg
 from car_training.tasks.manager_based.car_training.configs.plane_track_params import GroundPlaceCfg, TrackParamsCfg
 from car_training.tasks.manager_based.car_training.configs.overhead_camera_params import OverheadCameraParamsCfg
-from car_training.tasks.manager_based.car_training.mdp.events import reset_robot_root_random
+from car_training.tasks.manager_based.car_training.mdp.events import reset_robot_root_random, reset_random_action_car
 
 import os
 from pathlib import Path
@@ -274,7 +274,7 @@ class EventCfg:
     # reset
     reset_robot_position = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
-    # reset for obstacle car
+    # reset for static obstacles, during sim
     reset_obstacle_car_position = EventTerm(
         func=reset_robot_root_random,
         mode="reset",
@@ -284,6 +284,29 @@ class EventCfg:
             "yaw_noise_std": 0.0, # radians, e.g. 0.2 ~= 11.5 degrees
             "lookahead": 5,       # how many points ahead to compute tangent
             "xy_rand_radius": 0.5
+        },
+    )
+
+    # pre-startup reset for static obstacles
+    reset_obstacle_car_position_prestartup = EventTerm(
+        func=reset_robot_root_random,
+        mode="pre_startup",
+        params={
+            "asset_cfg": SceneEntityCfg("obstacle_car"),
+            "z": 0.05,
+            "yaw_noise_std": 0.0, # radians, e.g. 0.2 ~= 11.5 degrees
+            "lookahead": 5,       # how many points ahead to compute tangent
+            "xy_rand_radius": 0.5
+        },
+    )
+
+    # reset for moving obstacles, during sim
+    reset_moving_obstacle_car_position = EventTerm(
+        func=reset_random_action_car,
+        mode="interval",
+        interval_range_s=(1, 1.01), # seconds, need to use range to fit EventTerm framework
+        params={
+            "asset_cfg": SceneEntityCfg("obstacle_car"),
         },
     )
 
