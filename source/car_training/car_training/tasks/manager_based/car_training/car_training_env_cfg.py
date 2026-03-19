@@ -330,7 +330,7 @@ class RewardsCfg:
     obstacle_collision_penalty = RewTerm(
         func=collision_penalty,
         params={"asset_cfg": SceneEntityCfg("robot"), "obstacle_cfg": SceneEntityCfg("obstacle_car")},
-        weight=3.0
+        weight=0.5
     )
         
     # steering_jerk_penalty_term = RewTerm(
@@ -350,6 +350,8 @@ class TerminationsCfg:
     
     collision = DoneTerm(func=collision_termination,
                          params={"asset_cfg": SceneEntityCfg("robot"), "obstacle_cfg": SceneEntityCfg("obstacle_car")},)
+
+    time_out_term = DoneTerm(func=mdp.time_out)
 
 
 
@@ -390,7 +392,7 @@ class CarTrainingEnvCfg(ManagerBasedRLEnvCfg):
         """Post initialization."""
         # general settings
         self.decimation = 2 # How many physics substeps the same action is applied for
-        self.episode_length_s = 15
+        self.episode_length_s = 150
         # viewer settings
         self.viewer.eye = (0.0, 0.0, 40.0)
         # simulation settings
