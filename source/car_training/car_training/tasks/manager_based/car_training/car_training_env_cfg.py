@@ -16,7 +16,7 @@ from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.managers import ActionTermCfg as ActionTermCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
-from isaaclab.sensors import TiledCameraCfg
+from isaaclab.sensors import TiledCameraCfg, ContactSensorCfg
 from isaaclab.actuators import ImplicitActuatorCfg
 
 from . import mdp
@@ -27,7 +27,7 @@ from car_training.tasks.manager_based.car_training.mdp.observation import  (
     aligned_robot_vel,
     aligned_obstacle_image,
 )
-from car_training.tasks.manager_based.car_training.mdp.termination import off_track_termination, collision_termination
+from car_training.tasks.manager_based.car_training.mdp.termination import off_track_termination, collision_termination, off_track_termination_with_obstacle
 from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSteerAckermannAction
 from car_training.tasks.manager_based.car_training.configs.leatherback_params import LeatherbackParamsCfg
 from car_training.tasks.manager_based.car_training.configs.ttr_params import TTRNanoParamsCfg
@@ -211,13 +211,47 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
     track: TrackCfg = TrackCfg()
 
     # robot
-    robot: ArticulationCfg = LEATHERBACK_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    robot: ArticulationCfg = LEATHERBACK_CFG.replace(
+        prim_path="{ENV_REGEX_NS}/Robot",
+        spawn=LEATHERBACK_CFG.spawn.replace(
+            activate_contact_sensors=True,
+        ),
+    )
+
+    
+
+    
+
 
     # overhead camera
     # overhead_camera: OverheadCameraCfg | None = None
 
     # obstacle
-    obstacle_car: ArticulationCfg = LEATHERBACK_CFG.replace(prim_path="{ENV_REGEX_NS}/ObstacleCar")  # another car as obstacle
+    obstacle_car: ArticulationCfg = LEATHERBACK_CFG.replace(
+        prim_path="{ENV_REGEX_NS}/ObstacleCar",
+        spawn=LEATHERBACK_CFG.spawn.replace(
+            activate_contact_sensors=True,
+        ),
+    )
+    robot_chassis_contact_sensor: ContactSensorCfg = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/Rigid_Bodies/Chassis",
+        filter_prim_paths_expr=[
+            "{ENV_REGEX_NS}/ObstacleCar/Rigid_Bodies/Chassis",
+        ],
+        history_length=3, 
+        debug_vis=False,
+    )
+    obstacle_LF_tire_contact_sensor: ContactSensorCfg = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/ObstacleCar/Rigid_Bodies/Wheel_Rear_Left",
+        filter_prim_paths_expr=[
+            "{ENV_REGEX_NS}/Robot/Rigid_Bodies/Wheel_Rear_Left",
+            "{ENV_REGEX_NS}/Robot/Rigid_Bodies/Wheel_Rear_Right",
+            "{ENV_REGEX_NS}/Robot/Rigid_Bodies/Wheel_Front_Right",
+            "{ENV_REGEX_NS}/Robot/Rigid_Bodies/Wheel_Front_Left",
+        ],
+        history_length=3, 
+        debug_vis=False,
+    )
 
     # lights
     dome_light = AssetBaseCfg(
@@ -345,12 +379,30 @@ class TerminationsCfg:
     """Termination terms for the MDP."""
 
     # Out of bounds termination
-    out_of_bounds = DoneTerm(func=off_track_termination, 
-                             params={"asset_cfg": SceneEntityCfg("robot"),},)
+    out_of_bounds = DoneTerm(func=off_track_termination_with_obstacle, 
+                             params={"asset_cfg": SceneEntityCfg("robot"), "obstacle_cfg": SceneEntityCfg("obstacle_car")},)
     
-    collision = DoneTerm(func=collision_termination,
-                         params={"asset_cfg": SceneEntityCfg("robot"), "obstacle_cfg": SceneEntityCfg("obstacle_car")},)
+    # collision = DoneTerm(func=collision_termination,
+    #                      params={"asset_cfg": SceneEntityCfg("robot"), "obstacle_cfg": SceneEntityCfg("obstacle_car")},)
 
+    collision_chassis = DoneTerm(func=mdp.terminations.illegal_contact,
+                         params={
+                             "threshold": 0.05,
+                             "sensor_cfg": SceneEntityCfg("robot_chassis_contact_sensor"),
+                         })
+    
+    # collision_LF_tire = DoneTerm(func=wheel_contact_with_other_car,
+    #                      params={
+    #                          "sensor_name": "obstacle_LF_tire_contact_sensor",
+    #                          "threshold": 200,
+    #                      })
+    
+    # collision_RF_tire = DoneTerm(func=mdp.terminations.illegal_contact,
+    #                     params={
+    #                         "threshold": 15,
+    #                         "sensor_cfg": SceneEntityCfg("robot_RF_tire_contact_sensor"),
+    #                     })
+    
     time_out_term = DoneTerm(func=mdp.time_out)
 
 

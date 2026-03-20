@@ -21,7 +21,8 @@ from car_training.tasks.manager_based.car_training.mdp.utils.training_logging im
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
-CROPPED_IMAGE_SIZE = 96 # Size of the cropped track neighborhood image
+CROPPED_IMAGE_SIZE = 48 # Size of the cropped track neighborhood image
+OBSTACLE_CROPPED_IMAGE_SIZE = 144 # Size of the cropped obstacle image
 FRONT_STEER_NAMES = ["Knuckle__Upright__Front_Right", "Knuckle__Upright__Front_Left"]
 
 
@@ -133,7 +134,7 @@ def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, do_convert_coor
 
 
 
-def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, hide_previous_track: bool = True) -> torch.Tensor:
+def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, hide_previous_track: bool = False) -> torch.Tensor:
     """
     Get the track neighborhood image rotated and aligned with the car's heading.
     The car's heading will always point towards the top of the image.
@@ -257,7 +258,7 @@ def aligned_obstacle_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, ob
 
     device = env.unwrapped.device
     N = env.unwrapped.num_envs
-    crop = CROPPED_IMAGE_SIZE
+    crop = OBSTACLE_CROPPED_IMAGE_SIZE
 
     # Image size from static map
     imgs = env.unwrapped.static_track_image
@@ -357,18 +358,16 @@ def aligned_obstacle_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, ob
 
     logger.debug("Obtained aligned obstacle images.")
 
+    # resize the crops to the desired dimension 
+    crops = F.interpolate(crops, 
+                          size=(CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), 
+                          mode='area')
+
     # save debug image
     # debug_img = crops[0, 0].cpu().numpy() * 255
     # cv2.imwrite("debug_aligned_obstacle_image.png", debug_img)
 
     return crops
-
-    # return white image for debugging
-    blank_image = torch.ones((env.unwrapped.num_envs, 1, CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), device=env.unwrapped.device, dtype=torch.float32)
-    #save image
-    debug_img = blank_image[0, 0].cpu().numpy() * 255
-    cv2.imwrite("debug_aligned_obstacle_image.png", debug_img)
-    return blank_image
 
 
 def aligned_robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, normalize: bool) -> torch.Tensor:
