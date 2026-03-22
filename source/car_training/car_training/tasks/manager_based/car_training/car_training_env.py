@@ -13,9 +13,10 @@ ASSET_FOLDER = Path(__file__).resolve().parents[0] / "assets"
 import logging
 import cv2
 from car_training.tasks.manager_based.car_training.car_training_env_cfg import OverheadCameraCfg
-from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image, reset_obstacles_random
+from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image, reset_obstacles_random, generate_obstacles_map
 from car_training.tasks.manager_based.car_training.mdp.utils.helpers import find_track_points_from_image
 from isaaclab.envs import ManagerBasedRLEnv
+from isaaclab.managers import SceneEntityCfg
 from car_training.tasks.manager_based.car_training.car_training_env_cfg import CarTrainingEnvCfg
 from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import setup_logger, GpuSafeLogger
 from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSteerAckermannAction
@@ -63,6 +64,7 @@ class CarTrainingEnv(ManagerBasedRLEnv):
         :param options: Optional additional options for the reset.
         :type options: Optional[dict]
         """
+        # This function is called once at the beginning
 
         obs, info = super().reset(seed, env_ids, options)
 
@@ -70,11 +72,17 @@ class CarTrainingEnv(ManagerBasedRLEnv):
         self.__init_static_track_image_if_needed()
         self.__init_track_points_if_needed()
 
+        
         if env_ids is None:
             env_ids = torch.arange(self.num_envs, device=self.device)
 
         reset_obstacles_random(self, env_ids=env_ids, obstacle_names=["obstacle_0", "obstacle_1", "obstacle_2", "obstacle_3"],
                                top_half_only=False,)
+        
+        N, H, W, _ = self.static_track_image.shape
+        device = self.static_track_image.device
+        self.obstacle_map = torch.ones((N, 1, H, W), device=device)
+        generate_obstacles_map(self, env_ids=env_ids, multi_obstacle_cfgs=[SceneEntityCfg("obstacle_0"), SceneEntityCfg("obstacle_1"), SceneEntityCfg("obstacle_2"), SceneEntityCfg("obstacle_3")],)
         
         return obs, info
 
@@ -149,6 +157,10 @@ class CarTrainingEnv(ManagerBasedRLEnv):
             camera_cfg = self.scene.cfg.overhead_camera
             return camera_cfg.width, camera_cfg.height
         else:
-            return self.static_track_image.shape[2], self.static_track_image.shape[1]
+            if self.static_track_image is None:
+                print("Warning: Static track image is not initialized. Returning default camera dimensions (512, 386).")
+                return 512, 386
+            else:
+                return self.static_track_image.shape[2], self.static_track_image.shape[1]
 
 

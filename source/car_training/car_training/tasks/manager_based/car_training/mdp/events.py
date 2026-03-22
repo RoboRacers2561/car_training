@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 import logging
+import cv2
 import torch
 import math
 import numpy as np
@@ -21,6 +22,8 @@ if TYPE_CHECKING:
 from isaaclab.managers import SceneEntityCfg
 
 from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import GpuSafeLogger
+
+from car_training.tasks.manager_based.car_training.mdp.observation import multi_obstacles_pos, multi_obstacles_heading
 
 _LOGGER: Optional[GpuSafeLogger] = None
 
@@ -314,6 +317,192 @@ def reset_obstacles_random(
         obstacle.write_root_pose_to_sim(pose, env_ids=env_ids)
         obstacle.write_root_velocity_to_sim(torch.zeros((len(env_ids), 6), device=device), env_ids=env_ids)
 
+# def generate_obstacles_map(env, env_ids: torch.Tensor, multi_obstacle_cfgs: list[SceneEntityCfg]):
+#     multi_obstacle_xy = multi_obstacles_pos(env, multi_obstacle_cfgs, do_convert_coords=True)
+#     multi_obstacle_headings = multi_obstacles_heading(env, multi_obstacle_cfgs)
+
+#     num_obstacles = multi_obstacle_xy.shape[1]
+#     device = env.device
+
+#     side_len = 10.0
+#     half = side_len / 2.0
+
+#     if not hasattr(env.unwrapped, "obstacle_map"):
+#         camera_width, camera_height = env.unwrapped.get_camera_dimensions()
+#         env.unwrapped.obstacle_map = torch.ones(
+#             (env.num_envs, 1, camera_height, camera_width),
+#             device=device
+#         )
+
+#     for local_idx in range(env_ids.shape[0]):
+#         env_id = int(env_ids[local_idx].item())
+
+#         # clear only this actual env's canvas
+#         env.unwrapped.obstacle_map[env_id, 0].fill_(1.0)
+#         canvas = env.unwrapped.obstacle_map[env_id, 0].cpu().numpy()
+
+#         for j in range(num_obstacles):
+#             cx = multi_obstacle_xy[env_id, j, 0].item()
+#             cy = multi_obstacle_xy[env_id, j, 1].item()
+
+#             theta = torch.atan2(
+#                 multi_obstacle_headings[env_id, j, 1],
+#                 multi_obstacle_headings[env_id, j, 0]
+#             ).item()
+
+#             pts = torch.tensor([
+#                 [-half, -half],
+#                 [ half, -half],
+#                 [ half,  half],
+#                 [-half,  half],
+#             ], device=device, dtype=torch.float32)
+
+#             c = torch.cos(torch.tensor(theta, device=device))
+#             s = torch.sin(torch.tensor(theta, device=device))
+
+#             R = torch.tensor([
+#                 [c, -s],
+#                 [s,  c]
+#             ], device=device)
+
+#             pts = pts @ R.T
+#             pts[:, 0] += cx
+#             pts[:, 1] += cy
+#             pts = pts.long()
+
+#             cv2.fillPoly(canvas, [pts.cpu().numpy()], 0)
+
+#         env.unwrapped.obstacle_map[env_id, 0] = torch.tensor(canvas, device=device)
+
+def generate_obstacles_map(
+    env,
+    env_ids: torch.Tensor,
+    multi_obstacle_cfgs: list[SceneEntityCfg],
+    side_len: float = 10.0,
+):
+    """
+    Generate a binary obstacle map on GPU for rotated square obstacles.
+
+    Output convention:
+        1.0 = free space
+        0.0 = obstacle
+
+    Assumptions:
+        - multi_obstacles_pos(..., do_convert_coords=True) returns image-plane coordinates
+          in pixel units, shape either:
+              (num_envs, num_obstacles, 2)
+          or
+              (len(env_ids), num_obstacles, 2)
+        - multi_obstacles_heading(...) returns heading vectors, shape matching above:
+              (..., num_obstacles, 2)
+        - obstacle_map should have shape (num_envs, 1, H, W)
+    """
+    device = env.device
+    half = side_len / 2.0
+
+    # --------------------------------------------------
+    # Get obstacle centers + headings
+    # --------------------------------------------------
+    multi_obstacle_xy = multi_obstacles_pos(env, multi_obstacle_cfgs, do_convert_coords=True)
+    multi_obstacle_headings = multi_obstacles_heading(env, multi_obstacle_cfgs)
+
+    # Decide whether helper returns all envs or only requested env_ids
+    returns_all_envs = (multi_obstacle_xy.shape[0] == env.num_envs)
+
+    if returns_all_envs:
+        xy = multi_obstacle_xy[env_ids]                # (B, M, 2)
+        headings = multi_obstacle_headings[env_ids]   # (B, M, 2)
+    else:
+        xy = multi_obstacle_xy                        # (B, M, 2)
+        headings = multi_obstacle_headings            # (B, M, 2)
+
+    B, M, _ = xy.shape
+
+    # --------------------------------------------------
+    # Allocate obstacle map once
+    # --------------------------------------------------
+    if not hasattr(env.unwrapped, "obstacle_map"):
+        camera_width, camera_height = env.unwrapped.get_camera_dimensions()
+        env.unwrapped.obstacle_map = torch.ones(
+            (env.num_envs, 1, camera_height, camera_width),
+            device=device,
+            dtype=torch.float32,
+        )
+
+    _, _, H, W = env.unwrapped.obstacle_map.shape
+
+    # --------------------------------------------------
+    # Cache pixel grid on GPU
+    # grid_x, grid_y shapes: (H, W)
+    # --------------------------------------------------
+    grid_cache_ok = (
+        hasattr(env.unwrapped, "_obstacle_grid_x")
+        and hasattr(env.unwrapped, "_obstacle_grid_y")
+        and env.unwrapped._obstacle_grid_x.shape == (H, W)
+        and env.unwrapped._obstacle_grid_y.shape == (H, W)
+        and env.unwrapped._obstacle_grid_x.device == device
+        and env.unwrapped._obstacle_grid_y.device == device
+    )
+
+    if not grid_cache_ok:
+        ys = torch.arange(H, device=device, dtype=torch.float32)
+        xs = torch.arange(W, device=device, dtype=torch.float32)
+        grid_y, grid_x = torch.meshgrid(ys, xs, indexing="ij")  # both (H, W)
+        env.unwrapped._obstacle_grid_x = grid_x
+        env.unwrapped._obstacle_grid_y = grid_y
+
+    grid_x = env.unwrapped._obstacle_grid_x
+    grid_y = env.unwrapped._obstacle_grid_y
+
+    # --------------------------------------------------
+    # Compute heading angle for each obstacle
+    # headings[..., 0] = hx, headings[..., 1] = hy
+    # theta shape: (B, M)
+    # --------------------------------------------------
+    theta = torch.atan2(headings[..., 1], headings[..., 0])
+    cos_t = torch.cos(theta)
+    sin_t = torch.sin(theta)
+
+    # --------------------------------------------------
+    # Broadcast everything:
+    #
+    # xy[..., 0] -> cx shape (B, M, 1, 1)
+    # xy[..., 1] -> cy shape (B, M, 1, 1)
+    # grid_x/y    ->     shape (1, 1, H, W)
+    #
+    # world/image relative coordinates:
+    # dx = x - cx
+    # dy = y - cy
+    #
+    # rotate by -theta into obstacle local frame:
+    # x_local =  cos(theta)*dx + sin(theta)*dy
+    # y_local = -sin(theta)*dx + cos(theta)*dy
+    # --------------------------------------------------
+    cx = xy[..., 0].unsqueeze(-1).unsqueeze(-1)   # (B, M, 1, 1)
+    cy = xy[..., 1].unsqueeze(-1).unsqueeze(-1)   # (B, M, 1, 1)
+
+    cos_t = cos_t.unsqueeze(-1).unsqueeze(-1)     # (B, M, 1, 1)
+    sin_t = sin_t.unsqueeze(-1).unsqueeze(-1)     # (B, M, 1, 1)
+
+    gx = grid_x.unsqueeze(0).unsqueeze(0)         # (1, 1, H, W)
+    gy = grid_y.unsqueeze(0).unsqueeze(0)         # (1, 1, H, W)
+
+    dx = gx - cx                                  # (B, M, H, W)
+    dy = gy - cy                                  # (B, M, H, W)
+
+    x_local =  cos_t * dx + sin_t * dy
+    y_local = -sin_t * dx + cos_t * dy
+
+    # Inside rotated square
+    inside = (x_local.abs() <= half) & (y_local.abs() <= half)   # (B, M, H, W)
+
+    # Any obstacle occupies the pixel
+    occupied = inside.any(dim=1)                                  # (B, H, W)
+
+    batch_map = torch.ones((B, H, W), device=device, dtype=torch.float32)
+    batch_map[occupied] = 0.0
+
+    env.unwrapped.obstacle_map[env_ids, 0] = batch_map
 
 def choose_rand_point(pts) -> list[float, float]:
     """
