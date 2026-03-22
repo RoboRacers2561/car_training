@@ -69,6 +69,12 @@ class CarTrainingEnv(ManagerBasedRLEnv):
         # We perform the usual reset plus an initialization of the static track image if needed
         self.__init_static_track_image_if_needed()
         self.__init_track_points_if_needed()
+
+        if env_ids is None:
+            env_ids = torch.arange(self.num_envs, device=self.device)
+
+        reset_obstacles_random(self, env_ids=env_ids, obstacle_names=["obstacle_0", "obstacle_1", "obstacle_2", "obstacle_3"],
+                               top_half_only=False,)
         
         return obs, info
 
