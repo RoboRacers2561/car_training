@@ -191,6 +191,9 @@ def turning_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
 
     return penalty
 
+def obstacle_proximity_penalty(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg, obstacle_cfg: SceneEntityCfg, proximity_threshold: float = 30.0) -> torch.Tensor:
+    pass
+
 def collision_penalty(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, obstacle_cfg: SceneEntityCfg, collision_threshold: float = 20.0) -> torch.Tensor:
     """
     Collision penalty function that currently returns zero for all environments.

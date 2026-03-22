@@ -5,7 +5,7 @@
 
 
 import isaaclab.sim as sim_utils
-from isaaclab.assets import ArticulationCfg, AssetBaseCfg
+from isaaclab.assets import ArticulationCfg, AssetBaseCfg, RigidObjectCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
@@ -25,15 +25,16 @@ from car_training.tasks.manager_based.car_training.mdp.observation import  (
     aligned_track_neighborhood_image,
     robot_vel,
     aligned_robot_vel,
-    aligned_obstacle_image,
+    aligned_other_agents_image,
+    aligned_obstacle_image
 )
-from car_training.tasks.manager_based.car_training.mdp.termination import off_track_termination, collision_termination, off_track_termination_with_obstacle
+from car_training.tasks.manager_based.car_training.mdp.termination import off_track_termination, collision_termination, inside_obstacle_termination
 from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSteerAckermannAction
 from car_training.tasks.manager_based.car_training.configs.leatherback_params import LeatherbackParamsCfg
 from car_training.tasks.manager_based.car_training.configs.ttr_params import TTRNanoParamsCfg
 from car_training.tasks.manager_based.car_training.configs.plane_track_params import GroundPlaceCfg, TrackParamsCfg
 from car_training.tasks.manager_based.car_training.configs.overhead_camera_params import OverheadCameraParamsCfg
-from car_training.tasks.manager_based.car_training.mdp.events import reset_robot_root_random
+from car_training.tasks.manager_based.car_training.mdp.events import reset_robot_root_random, reset_obstacles_random
 
 import os
 from pathlib import Path
@@ -95,48 +96,6 @@ LEATHERBACK_CFG = ArticulationCfg(
     
 )
 
-ttr_nano_params = TTRNanoParamsCfg()
-
-TTR_NANO_CFG = ArticulationCfg(
-    spawn=sim_utils.UsdFileCfg(usd_path=ttr_nano_path,                       
-        rigid_props=sim_utils.RigidBodyPropertiesCfg(
-            rigid_body_enabled=ttr_nano_params.rigid_props.rigid_body_enabled,
-            max_linear_velocity=ttr_nano_params.rigid_props.max_linear_velocity,
-            max_angular_velocity=ttr_nano_params.rigid_props.max_angular_velocity,
-            max_depenetration_velocity=ttr_nano_params.rigid_props.max_depenetration_velocity,
-            enable_gyroscopic_forces=ttr_nano_params.rigid_props.enable_gyroscopic_forces,
-        ),
-        articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-            enabled_self_collisions=ttr_nano_params.articulation_props.enabled_self_collisions,
-            solver_position_iteration_count=ttr_nano_params.articulation_props.solver_position_iteration_count,
-            solver_velocity_iteration_count=ttr_nano_params.articulation_props.solver_velocity_iteration_count,
-            sleep_threshold=ttr_nano_params.articulation_props.sleep_threshold,
-            stabilization_threshold=ttr_nano_params.articulation_props.stabilization_threshold,
-        ),),
-
-    init_state= ArticulationCfg.InitialStateCfg(
-        pos=ttr_nano_params.init_state.pos,
-        rot=ttr_nano_params.init_state.rot,
-        joint_pos=ttr_nano_params.init_state.joint_pos,
-    ),
-    actuators={
-        "throttle": ImplicitActuatorCfg(
-            joint_names_expr=ttr_nano_params.actuators.throttle_joint_names_expr,
-            effort_limit=ttr_nano_params.actuators.throttle_effort_limit,
-            velocity_limit=ttr_nano_params.actuators.throttle_velocity_limit,
-            stiffness=ttr_nano_params.actuators.throttle_stiffness,
-            damping=ttr_nano_params.actuators.throttle_damping,
-        ),
-        "steering": ImplicitActuatorCfg(
-            joint_names_expr=ttr_nano_params.actuators.steering_joint_names_expr,
-            effort_limit=ttr_nano_params.actuators.steering_effort_limit,
-            velocity_limit=ttr_nano_params.actuators.steering_velocity_limit,
-            stiffness=ttr_nano_params.actuators.steering_stiffness,
-            damping=ttr_nano_params.actuators.steering_damping,
-        ),
-    },
-    
-)
 ##
 # Scene definition
 ##
@@ -198,6 +157,22 @@ class OverheadCameraCfg(TiledCameraCfg):
     width: int = camera_params.image.width
     height: int = camera_params.image.height
 
+def make_cube_obstacle(prim_path: str, size=(0.12, 0.12, 0.12), color=(1.0, 0.0, 0.0)) -> RigidObjectCfg:
+    return RigidObjectCfg(
+        prim_path=prim_path,
+        spawn=sim_utils.CuboidCfg(
+            size=size,
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                kinematic_enabled=True,   # obstacle stays fixed unless you move it manually
+                disable_gravity=True,
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=color),
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            pos=(0.0, 0.0, -10.0),   # hide them initially if you want
+        ),
+    )
 
 @configclass
 class CarTrainingSceneCfg(InteractiveSceneCfg):
@@ -217,38 +192,18 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
             activate_contact_sensors=True,
         ),
     )
-
-    
-
-    
-
+    # robot_2: ArticulationCfg = LEATHERBACK_CFG.replace(
+    #     prim_path="{ENV_REGEX_NS}/Robot2",
+    #     spawn=LEATHERBACK_CFG.spawn.replace(
+    #         activate_contact_sensors=True,
+    #     ),
+    # )
 
     # overhead camera
     # overhead_camera: OverheadCameraCfg | None = None
 
-    # obstacle
-    obstacle_car: ArticulationCfg = LEATHERBACK_CFG.replace(
-        prim_path="{ENV_REGEX_NS}/ObstacleCar",
-        spawn=LEATHERBACK_CFG.spawn.replace(
-            activate_contact_sensors=True,
-        ),
-    )
     robot_chassis_contact_sensor: ContactSensorCfg = ContactSensorCfg(
         prim_path="{ENV_REGEX_NS}/Robot/Rigid_Bodies/Chassis",
-        filter_prim_paths_expr=[
-            "{ENV_REGEX_NS}/ObstacleCar/Rigid_Bodies/Chassis",
-        ],
-        history_length=3, 
-        debug_vis=False,
-    )
-    obstacle_LF_tire_contact_sensor: ContactSensorCfg = ContactSensorCfg(
-        prim_path="{ENV_REGEX_NS}/ObstacleCar/Rigid_Bodies/Wheel_Rear_Left",
-        filter_prim_paths_expr=[
-            "{ENV_REGEX_NS}/Robot/Rigid_Bodies/Wheel_Rear_Left",
-            "{ENV_REGEX_NS}/Robot/Rigid_Bodies/Wheel_Rear_Right",
-            "{ENV_REGEX_NS}/Robot/Rigid_Bodies/Wheel_Front_Right",
-            "{ENV_REGEX_NS}/Robot/Rigid_Bodies/Wheel_Front_Left",
-        ],
         history_length=3, 
         debug_vis=False,
     )
@@ -259,6 +214,10 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.DomeLightCfg(color=(0.9, 0.9, 0.9), intensity=500.0),
     )
 
+    obstacle_0 = make_cube_obstacle("{ENV_REGEX_NS}/Obstacle_0", color=(1.0, 0.0, 0.0))
+    obstacle_1 = make_cube_obstacle("{ENV_REGEX_NS}/Obstacle_1", color=(1.0, 0.0, 0.0))
+    obstacle_2 = make_cube_obstacle("{ENV_REGEX_NS}/Obstacle_2", color=(1.0, 0.0, 0.0))
+    obstacle_3 = make_cube_obstacle("{ENV_REGEX_NS}/Obstacle_3", color=(1.0, 0.0, 0.0))
 
 ##
 # MDP settings
@@ -283,13 +242,13 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        image = ObsTerm(func=aligned_track_neighborhood_image,
+        track_image = ObsTerm(func=aligned_track_neighborhood_image,
                         params={"asset_cfg": SceneEntityCfg("robot"),},
                         clip=(0.0, 255.0),)
-        robot_image = ObsTerm(func=aligned_obstacle_image, # needs robot and obstacle cfg to find the relative pose and then align the image accordingly
-                        params={"asset_cfg": SceneEntityCfg("robot"), "obstacle_cfg": SceneEntityCfg("obstacle_car")},
+        obstacle_image = ObsTerm(func=aligned_obstacle_image, # needs robot and obstacle cfg to find the relative pose and then align the image accordingly
+                        params={"asset_cfg": SceneEntityCfg("robot"), "multi_obstacle_cfgs": [SceneEntityCfg("obstacle_0"), SceneEntityCfg("obstacle_1"), SceneEntityCfg("obstacle_2"), SceneEntityCfg("obstacle_3")]}, 
                         clip=(0.0, 255.0),)
-        joint_vel_rel = ObsTerm(func=aligned_robot_vel,
+        robot_vel = ObsTerm(func=aligned_robot_vel,
                                 params={"asset_cfg": SceneEntityCfg("robot"), "normalize": True},
                                 )
 
@@ -308,18 +267,21 @@ class EventCfg:
     # reset
     reset_robot_position = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
+    reset_obstacles_position = EventTerm(func=reset_obstacles_random, mode="reset", params={"obstacle_names": ["obstacle_0", "obstacle_1", "obstacle_2", "obstacle_3"],
+                                                                                            "z": 0.06, "top_half_only": False})
+    
     # reset for obstacle car
-    reset_obstacle_car_position = EventTerm(
-        func=reset_robot_root_random,
-        mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("obstacle_car"),
-            "z": 0.05,
-            "yaw_noise_std": 0.0, # radians, e.g. 0.2 ~= 11.5 degrees
-            "lookahead": 5,       # how many points ahead to compute tangent
-            "xy_rand_radius": 0.5
-        },
-    )
+    # reset_robot_2_position = EventTerm(
+    #     func=reset_robot_root_random,
+    #     mode="reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot_2"),
+    #         "z": 0.05,
+    #         "yaw_noise_std": 0.0, # radians, e.g. 0.2 ~= 11.5 degrees
+    #         "lookahead": 5,       # how many points ahead to compute tangent
+    #         "xy_rand_radius": 0.5
+    #     },
+    # )
 
 @configclass
 class RewardsCfg:
@@ -361,11 +323,11 @@ class RewardsCfg:
         weight=0.5
     )
 
-    obstacle_collision_penalty = RewTerm(
-        func=collision_penalty,
-        params={"asset_cfg": SceneEntityCfg("robot"), "obstacle_cfg": SceneEntityCfg("obstacle_car")},
-        weight=0.5
-    )
+    # obstacle_collision_penalty = RewTerm(
+    #     func=collision_penalty,
+    #     params={"asset_cfg": SceneEntityCfg("robot"), "obstacle_cfg": SceneEntityCfg("obstacle_car")},
+    #     weight=0.5
+    # )
         
     # steering_jerk_penalty_term = RewTerm(
     #     func=steering_jerk_penalty,
@@ -379,29 +341,19 @@ class TerminationsCfg:
     """Termination terms for the MDP."""
 
     # Out of bounds termination
-    out_of_bounds = DoneTerm(func=off_track_termination_with_obstacle, 
-                             params={"asset_cfg": SceneEntityCfg("robot"), "obstacle_cfg": SceneEntityCfg("obstacle_car")},)
-    
-    # collision = DoneTerm(func=collision_termination,
-    #                      params={"asset_cfg": SceneEntityCfg("robot"), "obstacle_cfg": SceneEntityCfg("obstacle_car")},)
+    out_of_bounds = DoneTerm(func=off_track_termination, 
+                             params={"asset_cfg": SceneEntityCfg("robot")},)
 
-    collision_chassis = DoneTerm(func=mdp.terminations.illegal_contact,
-                         params={
-                             "threshold": 0.05,
-                             "sensor_cfg": SceneEntityCfg("robot_chassis_contact_sensor"),
-                         })
-    
-    # collision_LF_tire = DoneTerm(func=wheel_contact_with_other_car,
+    # collision_chassis = DoneTerm(func=mdp.terminations.illegal_contact,
     #                      params={
-    #                          "sensor_name": "obstacle_LF_tire_contact_sensor",
-    #                          "threshold": 200,
+    #                          "threshold": 0.05,
+    #                          "sensor_cfg": SceneEntityCfg("robot_chassis_contact_sensor"),
     #                      })
-    
-    # collision_RF_tire = DoneTerm(func=mdp.terminations.illegal_contact,
-    #                     params={
-    #                         "threshold": 15,
-    #                         "sensor_cfg": SceneEntityCfg("robot_RF_tire_contact_sensor"),
-    #                     })
+
+    inside_obstacle_term = DoneTerm(func=inside_obstacle_termination,
+                            params={"asset_cfg": SceneEntityCfg("robot"), 
+                                    "multi_obstacle_cfgs": [SceneEntityCfg("obstacle_0"), SceneEntityCfg("obstacle_1"), SceneEntityCfg("obstacle_2"), SceneEntityCfg("obstacle_3")],
+                                    })
     
     time_out_term = DoneTerm(func=mdp.time_out)
 

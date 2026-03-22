@@ -132,7 +132,70 @@ def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, do_convert_coor
         logger.debug_lazy("Car image positions: %s", lambda: relative_pos)
     return relative_pos[:, :2]  # Return x, y position
 
+def single_obstacle_pos(env: ManagerBasedRLEnv, obstacle_cfg: SceneEntityCfg, do_convert_coords: bool = False) -> torch.Tensor:
+    """
+    Get the position of the obstacle relative to the environment or convert to image coordinates.
 
+    :param do_convert_coords: Whether to convert the coordinates to image space.
+    :type do_convert_coords: bool
+    :return: The (x, y) position of the obstacle.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+
+    asset: RigidObject = env.scene[obstacle_cfg.name]
+    relative_pos = asset.data.root_link_pos_w - env.scene.env_origins  # Relative to environment origin
+    logger.debug_lazy("Obstacle world positions: %s", lambda: relative_pos)
+
+    track_size = env.cfg.scene.ground_plane.ground_plane_params.each_track_size
+    camera_width, camera_height = env.unwrapped.get_camera_dimensions()
+    logger.debug(f"Track size: {track_size}, Camera width: {camera_width}, Camera height: {camera_height}")
+
+    if do_convert_coords:
+        relative_pos = convert_coords(relative_pos, track_size, (camera_width, camera_height))
+        logger.debug_lazy("Obstacle image positions: %s", lambda: relative_pos)
+    return relative_pos[:, :2]  # Return x, y position
+
+def multi_obstacles_pos(env: ManagerBasedRLEnv, obstacle_cfgs: list[SceneEntityCfg], do_convert_coords: bool = False) -> torch.Tensor:
+    """
+    Get the positions of multiple obstacles relative to the environment or convert to image coordinates.
+
+    :param do_convert_coords: Whether to convert the coordinates to image space.
+    :type do_convert_coords: bool
+    :return: The (x, y) positions of the obstacles, shape (N, num_obstacles, 2).
+    :rtype: torch.Tensor
+    """
+    positions = []
+    for obstacle_cfg in obstacle_cfgs:
+        xy_pos = single_obstacle_pos(env, obstacle_cfg, do_convert_coords=do_convert_coords)  # (N, 2)
+        positions.append(xy_pos)
+    
+    positions = torch.stack(positions, dim=1)  # (N, num_obstacles, 2)
+
+    return positions
+
+
+def single_obstacle_heading(env: ManagerBasedRLEnv, obstacle_cfg: SceneEntityCfg) -> torch.Tensor:
+
+    logger = get_logger(env)
+    asset: RigidObject = env.scene[obstacle_cfg.name]
+    obstacle_heading = asset.data.heading_w
+
+    logger.debug_lazy("Obstacle heading: %s", lambda: obstacle_heading)
+
+    # make a unit vector
+    obstacle_heading = torch.stack((torch.cos(obstacle_heading), -torch.sin(obstacle_heading)), dim=-1) # negative y to match image coords
+    return obstacle_heading
+
+def multi_obstacles_heading(env: ManagerBasedRLEnv, obstacle_cfgs: list[SceneEntityCfg]) -> torch.Tensor:
+    headings = []
+    for obstacle_cfg in obstacle_cfgs:
+        heading = single_obstacle_heading(env, obstacle_cfg)  # (N, 2)
+        headings.append(heading)
+    
+    headings = torch.stack(headings, dim=1)  # (N, num_obstacles, 2)
+
+    return headings
 
 def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, hide_previous_track: bool = False) -> torch.Tensor:
     """
@@ -237,10 +300,154 @@ def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEnt
 
     return gray_crops # (N, 1, crop, crop)
 
-
-def aligned_obstacle_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, obstacle_cfg: SceneEntityCfg) -> torch.Tensor:
+def aligned_obstacle_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, multi_obstacle_cfgs: list[SceneEntityCfg]) -> torch.Tensor:
     """
-    Generate aligned image of obstacles in frame.
+    Get the aligned obstacle image of shape (N, 1, crop, crop).
+
+    This function generates an image of the obstacles in the environment, aligned with the car's heading. 
+    The obstacles are represented as black trapezoids on a white background. The resulting image is cropped and rotated to match the car's perspective.
+
+    Returns:
+        torch.Tensor: Aligned obstacle images of shape (N, 1, crop, crop).
+    """
+
+    logger = get_logger(env)
+
+    if hasattr(env.unwrapped, 'static_track_image') and env.unwrapped.static_track_image is not None:
+        pass
+    else:
+        # return a dummy image if static image is not available
+        num_envs = env.unwrapped.num_envs
+        logger.warning("static track image not found, returning dummy gray image")
+        return torch.zeros((num_envs, 1, CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), device=env.unwrapped.device, dtype=torch.float32)
+
+    device = env.unwrapped.device
+    N = env.unwrapped.num_envs
+    crop = OBSTACLE_CROPPED_IMAGE_SIZE
+
+    # Image size from static map
+    imgs = env.unwrapped.static_track_image
+    N, H, W, _ = imgs.shape
+
+    # blank obstacle map in same resolution as track image
+    obstacle_map = torch.ones((N, 1, H, W), device=device)
+
+    robot_xy = robot_pos(env, asset_cfg, do_convert_coords=True)
+    robot_headings = robot_heading(env, asset_cfg)
+
+    multi_obstacle_xy = multi_obstacles_pos(env, multi_obstacle_cfgs, do_convert_coords=True)
+    multi_obstacle_headings = multi_obstacles_heading(env, multi_obstacle_cfgs)
+
+    # square parameters
+    side_len = 10.0
+    half = side_len / 2.0
+
+    num_envs = multi_obstacle_xy.shape[0]
+    num_obstacles = multi_obstacle_xy.shape[1]
+
+    for i in range(num_envs):
+
+        canvas = obstacle_map[i, 0].cpu().numpy()
+
+        for j in range(num_obstacles):
+
+            cx = multi_obstacle_xy[i, j, 0].item()
+            cy = multi_obstacle_xy[i, j, 1].item()
+
+            theta = torch.atan2(
+                multi_obstacle_headings[i, j, 1],
+                multi_obstacle_headings[i, j, 0]
+            ).item()
+
+            pts = torch.tensor([
+                [-half, -half],
+                [ half, -half],
+                [ half,  half],
+                [-half,  half],
+            ], device=device, dtype=torch.float32)
+
+            c = torch.cos(torch.tensor(theta, device=device))
+            s = torch.sin(torch.tensor(theta, device=device))
+
+            R = torch.tensor([
+                [c, -s],
+                [s,  c]
+            ], device=device)
+
+            pts = pts @ R.T
+            pts[:, 0] += cx
+            pts[:, 1] += cy
+
+            pts = pts.long()
+
+            # draw THIS obstacle onto same canvas
+            cv2.fillPoly(canvas, [pts.cpu().numpy()], 0)
+
+        # write back once per env (important!)
+        obstacle_map[i, 0] = torch.tensor(canvas, device=device)
+
+    # ----- SAME ROTATION / CROPPING AS TRACK FUNCTION -----
+
+    cx = 2.0 * robot_xy[:, 0] / (W - 1) - 1.0
+    cy = 2.0 * robot_xy[:, 1] / (H - 1) - 1.0
+
+    lin = torch.linspace(-1, 1, crop, device=device)
+    dy, dx = torch.meshgrid(lin, lin, indexing="ij")
+
+    dx = dx[None] * (crop / W)
+    dy = dy[None] * (crop / H)
+
+    grid = torch.stack(
+        (
+            cx[:, None, None] + dx,
+            cy[:, None, None] + dy,
+        ),
+        dim=-1,
+    )
+
+    headings = robot_headings
+    angles = torch.atan2(-headings[:, 0], headings[:, 1]) + torch.pi
+
+    cos = torch.cos(angles).view(-1,1,1,1)
+    sin = torch.sin(angles).view(-1,1,1,1)
+
+    center = torch.stack((cx, cy), dim=-1).view(-1,1,1,2)
+    rel = grid - center
+
+    rel_x = rel[...,0:1]
+    rel_y = rel[...,1:2]
+
+    rot_x = cos * rel_x - sin * rel_y
+    rot_y = sin * rel_x + cos * rel_y
+
+    grid = torch.cat((rot_x, rot_y), dim=-1) + center
+
+    crops = F.grid_sample(
+        obstacle_map,
+        grid,
+        mode="bilinear",
+        padding_mode="border",
+        align_corners=True,
+    )
+
+    logger.debug("Obtained aligned obstacle images.")
+
+    # resize the crops to the desired dimension 
+    crops = F.interpolate(crops, 
+                          size=(CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), 
+                          mode='area')
+
+    # save debug image
+    # debug_img = crops[0, 0].cpu().numpy() * 255
+    # cv2.imwrite("debug_aligned_obstacle_image.png", debug_img)
+
+    return crops
+
+
+
+def aligned_other_agents_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, obstacle_cfg: SceneEntityCfg) -> torch.Tensor:
+    """
+    Generate aligned image of other agents in frame.
 
     Returns:
         torch.Tensor: (N, 1, crop, crop)
@@ -270,8 +477,8 @@ def aligned_obstacle_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, ob
     robot_xy = robot_pos(env, asset_cfg, do_convert_coords=True)
     robot_headings = robot_heading(env, asset_cfg)
 
-    obstacle_xy = robot_pos(env, obstacle_cfg, do_convert_coords=True)
-    obstacle_headings = robot_heading(env, obstacle_cfg)
+    other_robot_xy = robot_pos(env, obstacle_cfg, do_convert_coords=True)
+    other_robot_headings = robot_heading(env, obstacle_cfg)
 
     # trapezoid parameters
     top_w = 5
@@ -281,12 +488,12 @@ def aligned_obstacle_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, ob
 
     for i in range(N):
 
-        cx = obstacle_xy[i, 0].item()
-        cy = obstacle_xy[i, 1].item()
+        cx = other_robot_xy[i, 0].item()
+        cy = other_robot_xy[i, 1].item()
 
         theta = torch.atan2(
-            obstacle_headings[i,1],
-            obstacle_headings[i,0]
+            other_robot_headings[i,1],
+            other_robot_headings[i,0]
         ).item()
 
         pts = torch.tensor([

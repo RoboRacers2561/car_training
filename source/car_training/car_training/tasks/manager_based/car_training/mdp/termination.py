@@ -10,7 +10,7 @@ from isaaclab.managers import SceneEntityCfg
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
-from car_training.tasks.manager_based.car_training.mdp.observation import aligned_track_neighborhood_image, robot_pos, robot_heading, aligned_obstacle_image
+from car_training.tasks.manager_based.car_training.mdp.observation import aligned_track_neighborhood_image, robot_pos, robot_heading, aligned_other_agents_image, multi_obstacles_pos
 from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import GpuSafeLogger
 
 _LOGGER: Optional[GpuSafeLogger] = None
@@ -87,7 +87,7 @@ def off_track_termination_with_obstacle(env: ManagerBasedRLEnv, asset_cfg: Scene
     )
 
     # get obstacle image
-    obstacle_imgs = aligned_obstacle_image(env, asset_cfg, obstacle_cfg)  # (N, 1, H, W)
+    obstacle_imgs = aligned_other_agents_image(env, asset_cfg, obstacle_cfg)  # (N, 1, H, W)
     obstacle_imgs = obstacle_imgs.squeeze(1)  # (N, H, W)
     has_obstacle_pixel = torch.any(
         obstacle_imgs < black_pixel_threshold,  # assuming obstacle pixels are bright in the image
@@ -96,6 +96,43 @@ def off_track_termination_with_obstacle(env: ManagerBasedRLEnv, asset_cfg: Scene
 
     no_track_no_obstacle = ~(has_track_pixel | has_obstacle_pixel)
     return no_track_no_obstacle
+
+def inside_obstacle_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, multi_obstacle_cfgs: list[SceneEntityCfg], proximity_threshold: float = 14.0) -> torch.Tensor:
+    """
+    Vectorized termination function that ends an episode if the car is within a certain proximity to any obstacle.
+
+    Args:
+        env: The environment instance.
+        state: The current state of the environment.
+    Returns:
+        torch.Tensor: A tensor indicating which episodes should terminate.
+    """
+    logger = get_logger(env)
+
+    robot_positions = robot_pos(env, asset_cfg, do_convert_coords=True)  # (N, 2)
+    
+    inside_any_obstacle = torch.zeros(robot_positions.shape[0], dtype=torch.bool, device=robot_positions.device)
+    all_obstacle_positions = multi_obstacles_pos(env, multi_obstacle_cfgs, do_convert_coords=True)  # (N, num_obstacles, 2)
+
+    for i in range(all_obstacle_positions.shape[1]):
+        obstacle_positions = all_obstacle_positions[:, i, :]  # (N, 2)
+        distances = torch.norm(robot_positions - obstacle_positions, dim=1)  # (N,)
+        inside_obstacle = distances < proximity_threshold
+        inside_any_obstacle |= inside_obstacle
+
+    # increment/reset in_obstacle counter
+    env.unwrapped.in_obstacle_radius_counter = torch.where(
+        inside_any_obstacle,
+        env.unwrapped.in_obstacle_radius_counter + 1,
+        torch.zeros_like(env.unwrapped.in_obstacle_radius_counter),
+    )
+
+    inside_too_long = env.unwrapped.in_obstacle_radius_counter >= env.unwrapped.in_obstacle_time_threshold
+
+    logger.debug_lazy("Inside obstacle flags: %s", lambda: inside_any_obstacle)
+    logger.debug_lazy("Inside too long flags: %s", lambda: inside_too_long)
+
+    return inside_too_long
 
 
 

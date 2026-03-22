@@ -45,44 +45,28 @@ def get_logger(env: ManagerBasedRLEnv) -> GpuSafeLogger:
 
 def set_robot_visibility(env: ManagerBasedRLEnv, visible: bool):
     """
-    Set the visibility of the robot in the simulation environment.
-
-    :param env: The environment instance.
-    :type env: ManagerBasedRLEnv
-    :param visible: Whether to make the robot visible or invisible.
-    :type visible: bool
+    Set visibility for all robot prims following naming convention:
+    Robot, Robot2, Robot3, ...
     """
+
     logger = get_logger(env)
-    robot_paths = [f"{p}/Robot" for p in env.scene.env_prim_paths]
 
-    for p in robot_paths:
-        logger.info(f"{'Showing' if visible else 'Hiding'} robot prim at path: {p}")
-        prim = get_prim_at_path(p)
-        if visible:
-            UsdGeom.Imageable(prim).MakeVisible()
-        else:
-            UsdGeom.Imageable(prim).MakeInvisible()
+    for env_path in env.scene.env_prim_paths:
+        env_prim = get_prim_at_path(env_path)
 
+        # iterate over all children under this env
+        for child in env_prim.GetChildren():
+            name = child.GetName()
 
-def set_obstacle_visibility(env: ManagerBasedRLEnv, visible: bool):
-    """
-    Set the visibility of the obstacle in the simulation environment.
+            # match Robot, Robot2, Robot3, ...
+            if name.startswith("Robot"):
+                logger.info(f"{'Showing' if visible else 'Hiding'} robot prim at path: {child.GetPath()}")
 
-    :param env: The environment instance.
-    :type env: ManagerBasedRLEnv
-    :param visible: Whether to make the obstacle visible or invisible.
-    :type visible: bool
-    """
-    logger = get_logger(env)
-    obstacle_paths = [f"{p}/ObstacleCar" for p in env.scene.env_prim_paths]
-
-    for p in obstacle_paths:
-        logger.info(f"{'Showing' if visible else 'Hiding'} obstacle prim at path: {p}")
-        prim = get_prim_at_path(p)
-        if visible:
-            UsdGeom.Imageable(prim).MakeVisible()
-        else:
-            UsdGeom.Imageable(prim).MakeInvisible()
+                imageable = UsdGeom.Imageable(child)
+                if visible:
+                    imageable.MakeVisible()
+                else:
+                    imageable.MakeInvisible()
 
 
 def init_static_track_image(env: ManagerBasedRLEnv, camera_name: str = "overhead_camera", num_warmup_steps: int = 10):
@@ -106,7 +90,6 @@ def init_static_track_image(env: ManagerBasedRLEnv, camera_name: str = "overhead
 
     # hide robots so they don't appear
     set_robot_visibility(env, visible=False)
-    set_obstacle_visibility(env, visible=False)
 
     logger.debug("Rendering simulation for %d warmup steps to capture static track image.", num_warmup_steps)
     # Render some new frames (avoiding using step)
@@ -131,7 +114,6 @@ def init_static_track_image(env: ManagerBasedRLEnv, camera_name: str = "overhead
 
     # show robots back
     set_robot_visibility(env, visible=True)
-    set_obstacle_visibility(env, visible=True)
 
     return static_track_image
 
@@ -252,6 +234,87 @@ def reset_robot_root_random(
     robot.write_root_pose_to_sim(torch.cat([pos, quat], dim=-1), env_ids=env_ids)
     robot.write_root_velocity_to_sim(torch.zeros((n, 6), device=device), env_ids=env_ids)
 
+def reset_obstacles_random(
+    env,
+    env_ids: torch.Tensor,
+    obstacle_names: list[str],
+    z: float = 0.06,
+    xy_rand_radius: float = 0.03,
+    top_half_only: bool = True,
+    min_separation: float = 1.0,   # keep obstacles apart
+):
+    """
+    Place multiple cube obstacles at random track locations.
+    Assumes env.track_points_world has already been initialized.
+    """
+    device = env.device
+    origins = env.scene.env_origins
+
+    if len(env.track_points_world) == 0:
+        return
+
+    num_obs = len(obstacle_names)
+
+    # collect poses for each obstacle separately because each asset writes separately
+    obstacle_positions = {
+        name: torch.zeros((len(env_ids), 3), device=device, dtype=torch.float32)
+        for name in obstacle_names
+    }
+    obstacle_quats = {
+        name: torch.tensor([[1.0, 0.0, 0.0, 0.0]], device=device).repeat(len(env_ids), 1)
+        for name in obstacle_names
+    }
+
+    for k, eid in enumerate(env_ids.tolist()):
+        pts = env.track_points_world[eid]
+
+        if top_half_only:
+            pts = [p for p in pts if float(p[1]) >= 0.0]
+
+        if len(pts) < num_obs:
+            raise RuntimeError(f"Not enough track points in env {eid} to place {num_obs} obstacles.")
+
+        chosen_positions = []
+
+        max_tries = 500
+        tries = 0
+        while len(chosen_positions) < num_obs and tries < max_tries:
+            tries += 1
+
+            j = int(torch.randint(0, len(pts), (1,), device=device).item())
+            x0, y0 = pts[j]
+
+            angle = torch.rand((), device=device) * 2 * math.pi
+            distance = torch.rand((), device=device) * xy_rand_radius
+            x = float(x0) + float(distance) * math.cos(float(angle))
+            y = float(y0) + float(distance) * math.sin(float(angle))
+
+            ok = True
+            for (px, py) in chosen_positions:
+                if math.hypot(x - px, y - py) < min_separation:
+                    ok = False
+                    break
+
+            if ok:
+                chosen_positions.append((x, y))
+
+        if len(chosen_positions) < num_obs:
+            raise RuntimeError(f"Could not place {num_obs} separated obstacles in env {eid}.")
+
+        for obs_idx, name in enumerate(obstacle_names):
+            x, y = chosen_positions[obs_idx]
+            obstacle_positions[name][k, 0] = x + float(origins[eid, 0])
+            obstacle_positions[name][k, 1] = y + float(origins[eid, 1])
+            obstacle_positions[name][k, 2] = z + float(origins[eid, 2])
+
+    # write poses to sim
+    for name in obstacle_names:
+        obstacle = env.scene[name]
+        pose = torch.cat([obstacle_positions[name], obstacle_quats[name]], dim=-1)
+        obstacle.write_root_pose_to_sim(pose, env_ids=env_ids)
+        obstacle.write_root_velocity_to_sim(torch.zeros((len(env_ids), 6), device=device), env_ids=env_ids)
+
+
 def choose_rand_point(pts) -> list[float, float]:
     """
     Choose a random point from a list of points.
@@ -269,6 +332,8 @@ def choose_rand_point(pts) -> list[float, float]:
     idx = torch.randint(0, len(pts), (1,)).item()
     return pts[idx]
 
+
+##### ---------- Below are functions for Reset Agent Training ---------- #####
 def reset_destination_pos(env: ManagerBasedRLEnv, env_ids: torch.Tensor):
     """
     Reset the destination position for the specified environments to a random point on the track.

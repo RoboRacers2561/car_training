@@ -22,9 +22,9 @@ class CustomMultiInputExtractor(BaseFeaturesExtractor):
     def __init__(self, observation_space, features_dim=128):
         super().__init__(observation_space, features_dim)
 
-        image_space = observation_space.spaces["image"]
-        robot_image_space = observation_space.spaces["robot_image"]
-        vel_space = observation_space.spaces["joint_vel_rel"]
+        image_space = observation_space.spaces["track_image"]
+        robot_image_space = observation_space.spaces["obstacle_image"]
+        vel_space = observation_space.spaces["robot_vel"]
 
         # --- CNN with residual blocks ---
         self.cnn = nn.Sequential(
@@ -72,11 +72,11 @@ class CustomMultiInputExtractor(BaseFeaturesExtractor):
         )
 
     def forward(self, observations):
-        img = observations["image"]
-        robot_img = observations["robot_image"]
-        
-        img = torch.cat([img, robot_img], dim=1)  # concatenate along channel dimension
-        vel = observations["joint_vel_rel"]
+        img = observations["track_image"]
+        obstacle_image = observations["obstacle_image"]
+
+        img = torch.cat([img, obstacle_image], dim=1)  # concatenate along channel dimension
+        vel = observations["robot_vel"]
 
         img_features = self.image_fc(self.cnn(img)) 
         vel_features = self.vel_fc(vel)

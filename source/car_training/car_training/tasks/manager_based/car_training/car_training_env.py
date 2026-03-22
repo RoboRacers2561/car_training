@@ -13,7 +13,7 @@ ASSET_FOLDER = Path(__file__).resolve().parents[0] / "assets"
 import logging
 import cv2
 from car_training.tasks.manager_based.car_training.car_training_env_cfg import OverheadCameraCfg
-from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image
+from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image, reset_obstacles_random
 from car_training.tasks.manager_based.car_training.mdp.utils.helpers import find_track_points_from_image
 from isaaclab.envs import ManagerBasedRLEnv
 from car_training.tasks.manager_based.car_training.car_training_env_cfg import CarTrainingEnvCfg
@@ -46,6 +46,9 @@ class CarTrainingEnv(ManagerBasedRLEnv):
 
         self.action_driver: ThrottleSteerAckermannAction = self.action_manager._terms["drive"] # this is a ThrottleSteerAckermannAction
 
+        self.in_obstacle_radius_counter = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device) # to keep track of whether each robot is currently within the obstacle proximity radius
+        self.in_obstacle_time_s = 5
+        self.in_obstacle_time_threshold = int(self.in_obstacle_time_s / self.step_dt) 
 
     def reset(self, seed = None, env_ids = None, options = None) -> tuple[dict[str, torch.Tensor], dict]:
         """
