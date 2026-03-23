@@ -320,6 +320,11 @@ def reset_obstacles_random(
             obstacle.write_root_pose_to_sim(torch.zeros_like(pose), env_ids=env_ids)  # move to origin if obstacles are disabled
         obstacle.write_root_velocity_to_sim(torch.zeros((len(env_ids), 6), device=device), env_ids=env_ids)
 
+def reset_stacked_obstacles_images(env, env_ids: torch.Tensor):
+    env.unwrapped._obstacle_stack_initialized[env_ids] = False
+    env.unwrapped.stack_step_counters[env_ids] = 0
+    
+
 def generate_obstacles_map(
     env,
     env_ids: torch.Tensor,

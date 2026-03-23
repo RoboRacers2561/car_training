@@ -53,6 +53,12 @@ class CarTrainingEnv(ManagerBasedRLEnv):
         self.in_obstacle_time_s = 5
         self.in_obstacle_time_threshold = int(self.in_obstacle_time_s / self.step_dt) 
 
+        # for stacking obstacle images
+        self._obstacle_stack_initialized = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+        self.stack_frequency_s = 0.3
+        self.stack_frequency_steps = int(self.stack_frequency_s / self.step_dt)
+        self.stack_step_counters = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device)
+
     def reset(self, seed = None, env_ids = None, options = None) -> tuple[dict[str, torch.Tensor], dict]:
         """
         This is the reset method for the CarTrainingEnv class. This method is called only once at the beginning 

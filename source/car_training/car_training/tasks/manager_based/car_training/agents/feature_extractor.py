@@ -71,6 +71,10 @@ class CustomMultiInputExtractor(BaseFeaturesExtractor):
             nn.Linear(128, features_dim),
         )
 
+        print("track_image_space.shape =", track_image_space.shape)
+        print("obstacle_image_space.shape =", obstacle_image_space.shape)
+        print("total channels =", track_image_space.shape[0] + obstacle_image_space.shape[0])
+
     def forward(self, observations):
         img = observations["track_image"]
         obstacle_image = observations["obstacle_image"]

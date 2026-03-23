@@ -318,9 +318,11 @@ def aligned_obstacle_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, mu
     else:
         # return a dummy image if static image is not available
         num_envs = env.unwrapped.num_envs
-        logger.warning("static track image not found, returning dummy gray image")
-        return torch.zeros((num_envs, 1, CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), device=env.unwrapped.device, dtype=torch.float32)
+        dummy_img = torch.ones((num_envs, 1, CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE))
 
+        stack_size = 4
+        return dummy_img.repeat(1, stack_size, 1, 1)
+        
     device = env.unwrapped.device
     N = env.unwrapped.num_envs
     crop = OBSTACLE_CROPPED_IMAGE_SIZE
@@ -336,7 +338,11 @@ def aligned_obstacle_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, mu
 
     if not env.unwrapped.enable_obstacles:
         # if obstacles are disabled, return a white image
-        return torch.ones((N, 1, CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), device=device)
+        dummy_img = torch.ones((N, 1, CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), device=device)
+        env._obstacle_image_stack = dummy_img.repeat(1, stack_size, 1, 1)
+        return env._obstacle_image_stack
+
+        
 
     robot_xy = robot_pos(env, asset_cfg, do_convert_coords=True)
     robot_headings = robot_heading(env, asset_cfg)
@@ -389,6 +395,8 @@ def aligned_obstacle_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, mu
         align_corners=True,
     )
 
+    crops = (crops > 0.5).float()
+
     logger.debug("Obtained aligned obstacle images.")
 
     # resize the crops to the desired dimension 
@@ -397,12 +405,52 @@ def aligned_obstacle_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, mu
                             size=(CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), 
                             mode='area')
         
+    if not hasattr(env, "_obstacle_image_stack"):
+        stack_size = 4
+        num_envs, _, H, W = crops.shape
+        env._stack_size = stack_size
+        env._obstacle_image_stack = crops.repeat(1, stack_size, 1, 1)
+        env._obstacle_stack_initialized = torch.zeros(num_envs, dtype=torch.bool, device=device)
+
+    if not hasattr(env, "stack_step_counters"):
+        env.stack_step_counters = torch.zeros(num_envs, dtype=torch.int32, device=device)
+
+    stack = env._obstacle_image_stack
+
+    # find which envs need initialization (first time or after reset)
+    to_init = ~env._obstacle_stack_initialized
+    
+    if to_init.any():
+        stack[to_init] = crops[to_init].repeat(1, env._stack_size, 1, 1)
+        env._obstacle_stack_initialized[to_init] = True
+        env.stack_step_counters[to_init] = 0
+
+    already_init = env._obstacle_stack_initialized & (~to_init)
+
+    # sample only when counter reaches frequency
+    to_update = already_init & (env.stack_step_counters >= env.stack_frequency_steps)
+
+    if to_update.any():
+        stack[to_update, 1:] = stack[to_update, :-1].clone()
+        stack[to_update, 0] = crops[to_update, 0]
+        env.stack_step_counters[to_update] = 0
+
+    # envs that were initialized but not updated this step
+    not_updated = already_init & (~to_update)
+    if not_updated.any():
+        env.stack_step_counters[not_updated] += 1
+        
 
     # save debug image
     # debug_img = crops[0, 0].cpu().numpy() * 255
     # cv2.imwrite("debug_aligned_obstacle_image.png", debug_img)
 
-    return crops
+    # visualize the stack for debugging
+    # for i in range(env._stack_size):
+    #     debug_img = stack[0, i].cpu().numpy() * 255
+    #     cv2.imwrite(f"debug_obstacle_stack_{i}.png", debug_img)
+
+    return stack
 
 
 

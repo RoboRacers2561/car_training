@@ -187,15 +187,15 @@ def turning_penalty(env: ManagerBasedRLEnv, robot_cfg, multi_obstacle_cfgs) -> t
 
     penalty = -1 * torch.abs(steer) / drive.max_steer # divide by max_steer to normalize
 
-    obstacle_imgs = aligned_obstacle_image(env, robot_cfg, multi_obstacle_cfgs)  # (N, 1, H, W)
-    obstacle_imgs = obstacle_imgs.squeeze(1)  # (N, H, W)
-    has_obstacle_pixel = torch.any(
-        obstacle_imgs < 0.12,  # assuming obstacle pixels are bright in the image
-        dim=(1, 2),
-    )
+    # obstacle_imgs = aligned_obstacle_image(env, robot_cfg, multi_obstacle_cfgs)  # (N, 1, H, W)
+    # obstacle_imgs = obstacle_imgs.squeeze(1)  # (N, H, W)
+    # has_obstacle_pixel = torch.any(
+    #     obstacle_imgs < 0.12,  # assuming obstacle pixels are bright in the image
+    #     dim=(1, 2),
+    # )
 
-    # penalty turns into reward if in proximity of an obstacle
-    penalty = torch.where(has_obstacle_pixel, -penalty, penalty)
+    # # penalty turns into reward if in proximity of an obstacle
+    # penalty = torch.where(has_obstacle_pixel, -penalty, penalty)
 
     logger.debug_lazy("Steering angles for turning penalty: %s", lambda: steer)
     logger.debug_lazy("Turning penalty: %s", lambda: penalty)
