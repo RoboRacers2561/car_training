@@ -320,6 +320,10 @@ class RewardsCfg:
     
     steer_penalty_term = RewTerm(
         func=turning_penalty,
+        params={
+            "robot_cfg": SceneEntityCfg("robot"),
+            "multi_obstacle_cfgs": [SceneEntityCfg("obstacle_0"), SceneEntityCfg("obstacle_1"), SceneEntityCfg("obstacle_2"), SceneEntityCfg("obstacle_3")],
+        },
         weight=0.5
     )
 

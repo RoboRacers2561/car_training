@@ -26,7 +26,7 @@ class CarTrainingEnv(ManagerBasedRLEnv):
     cfg: CarTrainingEnvCfg
 
     def __init__(self, cfg: CarTrainingEnvCfg, render_mode: str | None = None, task_name: str = "Unknown", console_level: int | None = logging.INFO,
-        file_level: int | None = logging.INFO, enable_cameras: bool = True, **kwargs):
+        file_level: int | None = logging.INFO, enable_cameras: bool = True, enable_obstacles: bool = True, **kwargs):
         
         self.task_name = task_name
         logger = setup_logger(task_name=task_name, name="car_training", console_level=console_level, file_level=file_level) # I am setting up the logger before calling the super constructor to allow for logging in observations and actions
@@ -35,6 +35,8 @@ class CarTrainingEnv(ManagerBasedRLEnv):
         self.enable_cameras = enable_cameras
         if self.enable_cameras:
             cfg.scene.overhead_camera = OverheadCameraCfg()
+
+        self.enable_obstacles = enable_obstacles
 
         super().__init__(cfg, render_mode, **kwargs)
 

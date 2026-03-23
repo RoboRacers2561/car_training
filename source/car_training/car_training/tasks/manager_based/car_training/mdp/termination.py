@@ -66,37 +66,6 @@ def off_track_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, mid
     logger.debug_lazy("Off track flags: %s", lambda: off_track_flags)
     return off_track_flags
 
-def off_track_termination_with_obstacle(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, obstacle_cfg: SceneEntityCfg) -> torch.Tensor:
-    """
-    Vectorized termination function that ends an episode track is not visible or obstacle is not visible.
-
-    Args:
-        env: The environment instance.
-        state: The current state of the environment.
-    Returns:
-        torch.Tensor: A tensor indicating which episodes should terminate.
-    """
-    # Get track neigborhborhood image & if not black pixels, terminate
-    track_imgs = aligned_track_neighborhood_image(env, asset_cfg)  # (N, 1, H, W)
-    track_imgs = track_imgs.squeeze(1)  # (N, H, W)
-    # Check for black pixels
-    black_pixel_threshold = 0.12  # Define a threshold to consider a pixel as black
-    has_track_pixel = torch.any(
-        track_imgs < black_pixel_threshold,
-        dim=(1, 2),
-    )
-
-    # get obstacle image
-    obstacle_imgs = aligned_other_agents_image(env, asset_cfg, obstacle_cfg)  # (N, 1, H, W)
-    obstacle_imgs = obstacle_imgs.squeeze(1)  # (N, H, W)
-    has_obstacle_pixel = torch.any(
-        obstacle_imgs < black_pixel_threshold,  # assuming obstacle pixels are bright in the image
-        dim=(1, 2),
-    )
-
-    no_track_no_obstacle = ~(has_track_pixel | has_obstacle_pixel)
-    return no_track_no_obstacle
-
 def inside_obstacle_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, multi_obstacle_cfgs: list[SceneEntityCfg], proximity_threshold: float = 14.0) -> torch.Tensor:
     """
     Vectorized termination function that ends an episode if the car is within a certain proximity to any obstacle.
@@ -112,6 +81,10 @@ def inside_obstacle_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCf
     robot_positions = robot_pos(env, asset_cfg, do_convert_coords=True)  # (N, 2)
     
     inside_any_obstacle = torch.zeros(robot_positions.shape[0], dtype=torch.bool, device=robot_positions.device)
+
+    if not env.unwrapped.enable_obstacles:
+        return inside_any_obstacle
+    
     all_obstacle_positions = multi_obstacles_pos(env, multi_obstacle_cfgs, do_convert_coords=True)  # (N, num_obstacles, 2)
 
     for i in range(all_obstacle_positions.shape[1]):

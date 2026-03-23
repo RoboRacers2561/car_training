@@ -20,7 +20,7 @@ from isaaclab.sensors import TiledCameraCfg
 from isaaclab.actuators import ImplicitActuatorCfg
 
 from . import mdp
-from car_training.tasks.manager_based.car_training.mdp.rewards import reset_agent_distance_reward, get_terminal_bonus, heading_alignment_reward, reset_agent_velocity_reward, turning_penalty, combined_heading_distance_reward
+from car_training.tasks.manager_based.car_training.mdp.rewards import reset_agent_distance_reward, get_terminal_bonus, heading_alignment_reward, reset_agent_velocity_reward, reset_agent_turning_penalty, combined_heading_distance_reward
 from car_training.tasks.manager_based.car_training.mdp.observation import get_reset_agent_observation
 from car_training.tasks.manager_based.car_training.mdp.termination import out_of_view_termination, reached_goal_termination
 from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSteerAckermannAction
@@ -351,7 +351,7 @@ class RewardsCfg:
     )
 
     turning_penalty_term = RewTerm(
-        func=turning_penalty,
+        func=reset_agent_turning_penalty,
         weight=2.0,
     )
 

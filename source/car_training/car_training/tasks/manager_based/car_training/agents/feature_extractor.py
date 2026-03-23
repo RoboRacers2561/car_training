@@ -22,13 +22,13 @@ class CustomMultiInputExtractor(BaseFeaturesExtractor):
     def __init__(self, observation_space, features_dim=128):
         super().__init__(observation_space, features_dim)
 
-        image_space = observation_space.spaces["track_image"]
-        robot_image_space = observation_space.spaces["obstacle_image"]
+        track_image_space = observation_space.spaces["track_image"]
+        obstacle_image_space = observation_space.spaces["obstacle_image"]
         vel_space = observation_space.spaces["robot_vel"]
 
         # --- CNN with residual blocks ---
         self.cnn = nn.Sequential(
-            nn.Conv2d(in_channels=image_space.shape[0] + robot_image_space.shape[0], out_channels=16, kernel_size=5, stride=2, padding=2),
+            nn.Conv2d(in_channels=track_image_space.shape[0] + obstacle_image_space.shape[0], out_channels=16, kernel_size=5, stride=2, padding=2),
             nn.BatchNorm2d(16),
             nn.ReLU(),
             ResidualBlock(16),
@@ -48,10 +48,10 @@ class CustomMultiInputExtractor(BaseFeaturesExtractor):
 
         # Compute CNN output size dynamically
         with torch.no_grad():
-            sample_input = torch.zeros(1, image_space.shape[0] + robot_image_space.shape[0], image_space.shape[1], image_space.shape[2])  # (1, C, H, W)
+            sample_input = torch.zeros(1, track_image_space.shape[0] + obstacle_image_space.shape[0], track_image_space.shape[1], track_image_space.shape[2])  # (1, C, H, W)
             n_flatten = self.cnn(sample_input).shape[1]
             print(f"CNN output size: {n_flatten}")
-            print(f"image shape: {image_space.shape}")
+            print(f"image shape: {track_image_space.shape}")
 
         self.image_fc = nn.Sequential(
             nn.Linear(n_flatten, 128),

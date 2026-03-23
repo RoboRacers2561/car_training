@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 CROPPED_IMAGE_SIZE = 48 # Size of the cropped track neighborhood image
-OBSTACLE_CROPPED_IMAGE_SIZE = 144 # Size of the cropped obstacle image
+OBSTACLE_CROPPED_IMAGE_SIZE = 48 # Size of the cropped obstacle image
 FRONT_STEER_NAMES = ["Knuckle__Upright__Front_Right", "Knuckle__Upright__Front_Left"]
 
 
@@ -334,64 +334,16 @@ def aligned_obstacle_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, mu
         env.unwrapped.obstacle_map = torch.ones((N, 1, H, W), device=device)
     obstacle_map = env.unwrapped.obstacle_map
 
+    if not env.unwrapped.enable_obstacles:
+        # if obstacles are disabled, return a white image
+        return torch.ones((N, 1, CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), device=device)
+
     robot_xy = robot_pos(env, asset_cfg, do_convert_coords=True)
     robot_headings = robot_heading(env, asset_cfg)
 
     # save images in obstacle map
     # for i in range(N):
     #     cv2.imwrite(f"obstacle_map_{i}.png", obstacle_map[i, 0].cpu().numpy() * 255)
-
-
-    # multi_obstacle_xy = multi_obstacles_pos(env, multi_obstacle_cfgs, do_convert_coords=True)
-    # multi_obstacle_headings = multi_obstacles_heading(env, multi_obstacle_cfgs)
-
-    # square parameters
-    # side_len = 10.0
-    # half = side_len / 2.0
-
-    # num_envs = multi_obstacle_xy.shape[0]
-    # num_obstacles = multi_obstacle_xy.shape[1]
-
-    # for i in range(num_envs):
-
-    #     canvas = obstacle_map[i, 0].cpu().numpy()
-
-    #     for j in range(num_obstacles):
-
-    #         cx = multi_obstacle_xy[i, j, 0].item()
-    #         cy = multi_obstacle_xy[i, j, 1].item()
-
-    #         theta = torch.atan2(
-    #             multi_obstacle_headings[i, j, 1],
-    #             multi_obstacle_headings[i, j, 0]
-    #         ).item()
-
-    #         pts = torch.tensor([
-    #             [-half, -half],
-    #             [ half, -half],
-    #             [ half,  half],
-    #             [-half,  half],
-    #         ], device=device, dtype=torch.float32)
-
-    #         c = torch.cos(torch.tensor(theta, device=device))
-    #         s = torch.sin(torch.tensor(theta, device=device))
-
-    #         R = torch.tensor([
-    #             [c, -s],
-    #             [s,  c]
-    #         ], device=device)
-
-    #         pts = pts @ R.T
-    #         pts[:, 0] += cx
-    #         pts[:, 1] += cy
-
-    #         pts = pts.long()
-
-    #         # draw THIS obstacle onto same canvas
-    #         cv2.fillPoly(canvas, [pts.cpu().numpy()], 0)
-
-    #     # write back once per env (important!)
-    #     obstacle_map[i, 0] = torch.tensor(canvas, device=device)
 
     # ----- SAME ROTATION / CROPPING AS TRACK FUNCTION -----
 
@@ -440,9 +392,11 @@ def aligned_obstacle_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, mu
     logger.debug("Obtained aligned obstacle images.")
 
     # resize the crops to the desired dimension 
-    crops = F.interpolate(crops, 
-                          size=(CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), 
-                          mode='area')
+    if CROPPED_IMAGE_SIZE != OBSTACLE_CROPPED_IMAGE_SIZE:
+        crops = F.interpolate(crops, 
+                            size=(CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), 
+                            mode='area')
+        
 
     # save debug image
     # debug_img = crops[0, 0].cpu().numpy() * 255

@@ -25,6 +25,7 @@ from car_training.tasks.manager_based.car_training.mdp.observation import (
     robot_pos,
     aligned_robot_vel,
     robot_vel,
+    aligned_obstacle_image
 )
 from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import (
     GpuSafeLogger,
@@ -166,7 +167,7 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     return penalty
 
 
-def turning_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
+def turning_penalty(env: ManagerBasedRLEnv, robot_cfg, multi_obstacle_cfgs) -> torch.Tensor:
     """
     Penalty for large steering angles, encouraging the reset agent to take smoother turns.
 
@@ -186,13 +187,20 @@ def turning_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
 
     penalty = -1 * torch.abs(steer) / drive.max_steer # divide by max_steer to normalize
 
+    obstacle_imgs = aligned_obstacle_image(env, robot_cfg, multi_obstacle_cfgs)  # (N, 1, H, W)
+    obstacle_imgs = obstacle_imgs.squeeze(1)  # (N, H, W)
+    has_obstacle_pixel = torch.any(
+        obstacle_imgs < 0.12,  # assuming obstacle pixels are bright in the image
+        dim=(1, 2),
+    )
+
+    # penalty turns into reward if in proximity of an obstacle
+    penalty = torch.where(has_obstacle_pixel, -penalty, penalty)
+
     logger.debug_lazy("Steering angles for turning penalty: %s", lambda: steer)
     logger.debug_lazy("Turning penalty: %s", lambda: penalty)
 
     return penalty
-
-def obstacle_proximity_penalty(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg, obstacle_cfg: SceneEntityCfg, proximity_threshold: float = 30.0) -> torch.Tensor:
-    pass
 
 def collision_penalty(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, obstacle_cfg: SceneEntityCfg, collision_threshold: float = 20.0) -> torch.Tensor:
     """
@@ -373,7 +381,7 @@ def reset_agent_velocity_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
 
     return velocity_reward
 
-def turning_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
+def reset_agent_turning_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     """
     Penalty for large steering angles, encouraging the reset agent to take smoother turns.
 

@@ -314,71 +314,17 @@ def reset_obstacles_random(
     for name in obstacle_names:
         obstacle = env.scene[name]
         pose = torch.cat([obstacle_positions[name], obstacle_quats[name]], dim=-1)
-        obstacle.write_root_pose_to_sim(pose, env_ids=env_ids)
+        if env.unwrapped.enable_obstacles:
+            obstacle.write_root_pose_to_sim(pose, env_ids=env_ids)
+        else:
+            obstacle.write_root_pose_to_sim(torch.zeros_like(pose), env_ids=env_ids)  # move to origin if obstacles are disabled
         obstacle.write_root_velocity_to_sim(torch.zeros((len(env_ids), 6), device=device), env_ids=env_ids)
-
-# def generate_obstacles_map(env, env_ids: torch.Tensor, multi_obstacle_cfgs: list[SceneEntityCfg]):
-#     multi_obstacle_xy = multi_obstacles_pos(env, multi_obstacle_cfgs, do_convert_coords=True)
-#     multi_obstacle_headings = multi_obstacles_heading(env, multi_obstacle_cfgs)
-
-#     num_obstacles = multi_obstacle_xy.shape[1]
-#     device = env.device
-
-#     side_len = 10.0
-#     half = side_len / 2.0
-
-#     if not hasattr(env.unwrapped, "obstacle_map"):
-#         camera_width, camera_height = env.unwrapped.get_camera_dimensions()
-#         env.unwrapped.obstacle_map = torch.ones(
-#             (env.num_envs, 1, camera_height, camera_width),
-#             device=device
-#         )
-
-#     for local_idx in range(env_ids.shape[0]):
-#         env_id = int(env_ids[local_idx].item())
-
-#         # clear only this actual env's canvas
-#         env.unwrapped.obstacle_map[env_id, 0].fill_(1.0)
-#         canvas = env.unwrapped.obstacle_map[env_id, 0].cpu().numpy()
-
-#         for j in range(num_obstacles):
-#             cx = multi_obstacle_xy[env_id, j, 0].item()
-#             cy = multi_obstacle_xy[env_id, j, 1].item()
-
-#             theta = torch.atan2(
-#                 multi_obstacle_headings[env_id, j, 1],
-#                 multi_obstacle_headings[env_id, j, 0]
-#             ).item()
-
-#             pts = torch.tensor([
-#                 [-half, -half],
-#                 [ half, -half],
-#                 [ half,  half],
-#                 [-half,  half],
-#             ], device=device, dtype=torch.float32)
-
-#             c = torch.cos(torch.tensor(theta, device=device))
-#             s = torch.sin(torch.tensor(theta, device=device))
-
-#             R = torch.tensor([
-#                 [c, -s],
-#                 [s,  c]
-#             ], device=device)
-
-#             pts = pts @ R.T
-#             pts[:, 0] += cx
-#             pts[:, 1] += cy
-#             pts = pts.long()
-
-#             cv2.fillPoly(canvas, [pts.cpu().numpy()], 0)
-
-#         env.unwrapped.obstacle_map[env_id, 0] = torch.tensor(canvas, device=device)
 
 def generate_obstacles_map(
     env,
     env_ids: torch.Tensor,
     multi_obstacle_cfgs: list[SceneEntityCfg],
-    side_len: float = 10.0,
+    side_len: float = 4.0,
 ):
     """
     Generate a binary obstacle map on GPU for rotated square obstacles.
