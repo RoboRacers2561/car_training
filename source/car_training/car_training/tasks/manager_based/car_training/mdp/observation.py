@@ -397,7 +397,7 @@ def aligned_obstacle_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, mu
                             size=(CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), 
                             mode='area')
         
-
+    crops = (crops > 0.5).float() # binarize the image
     # save debug image
     # debug_img = crops[0, 0].cpu().numpy() * 255
     # cv2.imwrite("debug_aligned_obstacle_image.png", debug_img)
