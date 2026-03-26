@@ -37,8 +37,8 @@ PROJECT_ROOT = Path(__file__).parents[6].resolve()
 leatherback_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/robot_assets/leatherback_simple_better.usd")
 
 # Track USD paths
-track_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/scene_assets/")
-TRACK_USD_PATH = track_usd_path + "multiagent_track.usd"
+track_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/scene_assets/tracks/")
+TRACK_USD_PATH = track_usd_path + "track_multiagent.usd"
 
 
 ## 
@@ -119,7 +119,7 @@ class TrackCfg(AssetBaseCfg):
     prim_path: str = "World/Track"
     print("track prim path:", prim_path)
     spawn: sim_utils.MultiUsdFileCfg = sim_utils.MultiUsdFileCfg(
-        usd_path=TRACK_USD_PATHS,
+        usd_path=TRACK_USD_PATH,
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             rigid_body_enabled=track_params.rigid_props.rigid_body_enabled,
             max_linear_velocity=track_params.rigid_props.max_linear_velocity,
@@ -132,10 +132,10 @@ class TrackCfg(AssetBaseCfg):
 
 @configclass
 class OverheadCameraCfg(TiledCameraCfg):
-    """Configuration for the per-env overhead camera."""
+    """Configuration for the overhead camera."""
     camera_params = OverheadCameraParamsCfg()
     
-    prim_path: str = "{ENV_REGEX_NS}/OverheadCamera"
+    prim_path: str = "World/OverheadCamera"
     offset: TiledCameraCfg.OffsetCfg = TiledCameraCfg.OffsetCfg(pos=camera_params.pose.pos, rot=camera_params.pose.rot, convention=camera_params.pose.convention)
     data_types: list = camera_params.image.data_types
     spawn: sim_utils.PinholeCameraCfg = sim_utils.PinholeCameraCfg(
@@ -183,12 +183,6 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
             activate_contact_sensors=True,
         ),
     )
-    # robot_2: ArticulationCfg = LEATHERBACK_CFG.replace(
-    #     prim_path="{ENV_REGEX_NS}/Robot2",
-    #     spawn=LEATHERBACK_CFG.spawn.replace(
-    #         activate_contact_sensors=True,
-    #     ),
-    # )
 
     # overhead camera
     # overhead_camera: OverheadCameraCfg | None = None
@@ -372,9 +366,9 @@ class CurriculumCfg:
 
 
 @configclass
-class CarTrainingEnvCfg(ManagerBasedRLEnvCfg):
+class MultiAgentEnvCfg(ManagerBasedRLEnvCfg):
     # Scene settings
-    scene: CarTrainingSceneCfg = CarTrainingSceneCfg(num_envs=1, env_spacing=15.0)
+    scene: CarTrainingSceneCfg = CarTrainingSceneCfg(num_envs=1, env_spacing=5.0)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
