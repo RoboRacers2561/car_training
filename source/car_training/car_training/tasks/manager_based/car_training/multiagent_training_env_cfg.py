@@ -116,7 +116,7 @@ class TrackCfg(AssetBaseCfg):
     """Multiagent track configuration."""
     track_params = TrackParamsCfg()
 
-    prim_path: str = "World/Track"
+    prim_path: str = "/World/Track"
     print("track prim path:", prim_path)
     spawn: sim_utils.MultiUsdFileCfg = sim_utils.MultiUsdFileCfg(
         usd_path=TRACK_USD_PATH,

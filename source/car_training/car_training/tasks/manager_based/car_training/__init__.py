@@ -33,7 +33,7 @@ gym.register(
 )
 
 gym.register(
-    id="MultiAgent-Car-Training-v0",
+    id="Multiagent-Car-Training-v0",
     entry_point="car_training.tasks.manager_based.car_training.multiagent_training_env:MultiAgentEnv",
     disable_env_checker=True,
     kwargs={

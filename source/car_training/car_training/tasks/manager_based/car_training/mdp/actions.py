@@ -101,7 +101,7 @@ class ThrottleSteerAckermannAction(ActionTerm):
 
         self.max_steer = MAX_STEER
 
-        if env.unwrapped.task_name == "Basic-Car-Training-v0":
+        if env.unwrapped.task_name == "Basic-Car-Training-v0" or env.unwrapped.task_name == "Multiagent-Car-Training-v0":
             self.max_throttle = MAX_THROTTLE_DRIVING_AGENT
             self.min_throttle = MIN_THROTTLE_DRIVING_AGENT
         elif env.unwrapped.task_name == "Reset-Agent":

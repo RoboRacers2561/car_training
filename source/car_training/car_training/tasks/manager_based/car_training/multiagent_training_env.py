@@ -12,7 +12,7 @@ ASSET_FOLDER = Path(__file__).resolve().parents[0] / "assets"
     
 import logging
 import cv2
-from car_training.tasks.manager_based.car_training.car_training_env_cfg import OverheadCameraCfg
+from car_training.tasks.manager_based.car_training.multiagent_training_env_cfg import OverheadCameraCfg
 from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image, reset_obstacles_random, generate_obstacles_map
 from car_training.tasks.manager_based.car_training.mdp.utils.helpers import find_track_points_from_image
 from isaaclab.envs import ManagerBasedRLEnv
@@ -22,7 +22,7 @@ from car_training.tasks.manager_based.car_training.mdp.utils.training_logging im
 from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSteerAckermannAction
 from car_training.tasks.manager_based.car_training.mdp.utils.helpers import convert_coords_list
 
-class CarTrainingEnv(ManagerBasedRLEnv):
+class MultiAgentEnv(ManagerBasedRLEnv):
     cfg: MultiAgentEnvCfg
 
     def __init__(self, cfg: MultiAgentEnvCfg, render_mode: str | None = None, task_name: str = "Unknown", console_level: int | None = logging.INFO,
@@ -55,7 +55,7 @@ class CarTrainingEnv(ManagerBasedRLEnv):
 
     def reset(self, seed = None, env_ids = None, options = None) -> tuple[dict[str, torch.Tensor], dict]:
         """
-        This is the reset method for the CarTrainingEnv class. This method is called only once at the beginning 
+        This is the reset method for the MultiAgentEnv class. This method is called only once at the beginning 
         of the training and is called explicitly by the user through `env.reset()`. This is not the same as the 
         reset method used at the end of each episode, which is handled internally by the environment.
         
@@ -66,6 +66,7 @@ class CarTrainingEnv(ManagerBasedRLEnv):
         :param options: Optional additional options for the reset.
         :type options: Optional[dict]
         """
+        # TODO: Adapt to new multiagent setup
         # This function is called once at the beginning
 
         obs, info = super().reset(seed, env_ids, options)
@@ -104,7 +105,7 @@ class CarTrainingEnv(ManagerBasedRLEnv):
                 self.logger.info("Static track image initialized.")
 
                 # save static track image as a .pt file
-                # torch.save(self.static_track_image.cpu(), f"{ASSET_FOLDER}/scene_assets/static_track_image_12_env.pt")
+                torch.save(self.static_track_image.cpu(), f"{ASSET_FOLDER}/scene_assets/multiagent_static_track_image.pt")
             else:
                 # use torch.load to load pre-saved static track image
                 self.static_track_image: torch.Tensor = torch.load(f"{ASSET_FOLDER}/scene_assets/static_track_image_12_env.pt").to(self.device)
