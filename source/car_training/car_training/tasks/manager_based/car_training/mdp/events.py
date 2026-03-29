@@ -8,7 +8,6 @@ import math
 import numpy as np
 
 from PIL import Image
-import omni.usd
 from pxr import UsdGeom
 from isaacsim.core.utils.prims import get_prim_at_path
 
@@ -28,6 +27,7 @@ from car_training.tasks.manager_based.car_training.mdp.observation import multi_
 _LOGGER: Optional[GpuSafeLogger] = None
 
 
+
 def get_logger(env: ManagerBasedRLEnv) -> GpuSafeLogger:
     """
     Get a child logger of the project logger for the car_training.mdp.observation module.
@@ -44,6 +44,7 @@ def get_logger(env: ManagerBasedRLEnv) -> GpuSafeLogger:
         short_name = ".".join(__name__.split(".")[-2:]) # car_training.mdp.observation
         _LOGGER = base.getChild(short_name)
     return _LOGGER
+
 
 
 def set_robot_visibility(env: ManagerBasedRLEnv, visible: bool):
@@ -70,6 +71,7 @@ def set_robot_visibility(env: ManagerBasedRLEnv, visible: bool):
                     imageable.MakeVisible()
                 else:
                     imageable.MakeInvisible()
+
 
 
 def init_static_track_image(env: ManagerBasedRLEnv, camera_name: str = "overhead_camera", num_warmup_steps: int = 10):
@@ -119,6 +121,8 @@ def init_static_track_image(env: ManagerBasedRLEnv, camera_name: str = "overhead
     set_robot_visibility(env, visible=True)
 
     return static_track_image
+
+
 
 def reset_robot_root_random(
     env,
@@ -236,6 +240,8 @@ def reset_robot_root_random(
 
     robot.write_root_pose_to_sim(torch.cat([pos, quat], dim=-1), env_ids=env_ids)
     robot.write_root_velocity_to_sim(torch.zeros((n, 6), device=device), env_ids=env_ids)
+
+
 
 def reset_obstacles_random(
     env,

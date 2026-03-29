@@ -38,7 +38,7 @@ leatherback_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_train
 
 # Track USD paths
 track_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/scene_assets/tracks/")
-TRACK_USD_PATH = track_usd_path + "track_multiagent.usd"
+TRACK_USD_PATH = track_usd_path + "track_marl_map.usd"
 
 
 ## 
@@ -135,7 +135,7 @@ class OverheadCameraCfg(TiledCameraCfg):
     """Configuration for the overhead camera."""
     camera_params = OverheadCameraParamsCfg()
     
-    prim_path: str = "World/OverheadCamera"
+    prim_path: str = "{ENV_REGEX_NS}/OverheadCamera"
     offset: TiledCameraCfg.OffsetCfg = TiledCameraCfg.OffsetCfg(pos=camera_params.pose.pos, rot=camera_params.pose.rot, convention=camera_params.pose.convention)
     data_types: list = camera_params.image.data_types
     spawn: sim_utils.PinholeCameraCfg = sim_utils.PinholeCameraCfg(
@@ -199,10 +199,10 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.DomeLightCfg(color=(0.9, 0.9, 0.9), intensity=500.0),
     )
 
-    obstacle_0 = make_cube_obstacle("{ENV_REGEX_NS}/Obstacle_0", color=(1.0, 0.0, 0.0))
-    obstacle_1 = make_cube_obstacle("{ENV_REGEX_NS}/Obstacle_1", color=(1.0, 0.0, 0.0))
-    obstacle_2 = make_cube_obstacle("{ENV_REGEX_NS}/Obstacle_2", color=(1.0, 0.0, 0.0))
-    obstacle_3 = make_cube_obstacle("{ENV_REGEX_NS}/Obstacle_3", color=(1.0, 0.0, 0.0))
+    # obstacle_0 = make_cube_obstacle("{ENV_REGEX_NS}/Obstacle_0", color=(1.0, 0.0, 0.0))
+    # obstacle_1 = make_cube_obstacle("{ENV_REGEX_NS}/Obstacle_1", color=(1.0, 0.0, 0.0))
+    # obstacle_2 = make_cube_obstacle("{ENV_REGEX_NS}/Obstacle_2", color=(1.0, 0.0, 0.0))
+    # obstacle_3 = make_cube_obstacle("{ENV_REGEX_NS}/Obstacle_3", color=(1.0, 0.0, 0.0))
 
 ##
 # MDP settings
@@ -230,8 +230,8 @@ class ObservationsCfg:
         track_image = ObsTerm(func=aligned_track_neighborhood_image,
                         params={"asset_cfg": SceneEntityCfg("robot"),},
                         clip=(0.0, 255.0),)
-        obstacle_image = ObsTerm(func=aligned_obstacle_image, # needs robot and obstacle cfg to find the relative pose and then align the image accordingly
-                        params={"asset_cfg": SceneEntityCfg("robot"), "multi_obstacle_cfgs": [SceneEntityCfg("obstacle_0"), SceneEntityCfg("obstacle_1"), SceneEntityCfg("obstacle_2"), SceneEntityCfg("obstacle_3")]}, 
+        obstacle_image = ObsTerm(func=aligned_other_agents_image, # needs robot and obstacle cfg to find the relative pose and then align the image accordingly
+                        params={"asset_cfg": SceneEntityCfg("robot"),}, 
                         clip=(0.0, 255.0),)
         robot_vel = ObsTerm(func=aligned_robot_vel,
                                 params={"asset_cfg": SceneEntityCfg("robot"), "normalize": True},
@@ -252,21 +252,10 @@ class EventCfg:
     # reset
     reset_robot_position = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
-    reset_obstacles_position = EventTerm(func=reset_obstacles_random, mode="reset", params={"obstacle_names": ["obstacle_0", "obstacle_1", "obstacle_2", "obstacle_3"],
-                                                                                            "z": 0.06, "top_half_only": False})
-    generating_obs_map = EventTerm(func=generate_obstacles_map, mode="reset", params={"multi_obstacle_cfgs": [SceneEntityCfg("obstacle_0"), SceneEntityCfg("obstacle_1"), SceneEntityCfg("obstacle_2"), SceneEntityCfg("obstacle_3")]})
-    # reset for obstacle car
-    # reset_robot_2_position = EventTerm(
-    #     func=reset_robot_root_random,
-    #     mode="reset",
-    #     params={
-    #         "asset_cfg": SceneEntityCfg("robot_2"),
-    #         "z": 0.05,
-    #         "yaw_noise_std": 0.0, # radians, e.g. 0.2 ~= 11.5 degrees
-    #         "lookahead": 5,       # how many points ahead to compute tangent
-    #         "xy_rand_radius": 0.5
-    #     },
-    # )
+    # reset_obstacles_position = EventTerm(func=reset_obstacles_random, mode="reset", params={"obstacle_names": ["obstacle_0", "obstacle_1", "obstacle_2", "obstacle_3"],
+    #                                                                                         "z": 0.06, "top_half_only": False})
+    # generating_obs_map = EventTerm(func=generate_obstacles_map, mode="reset", params={"multi_obstacle_cfgs": [SceneEntityCfg("obstacle_0"), SceneEntityCfg("obstacle_1"), SceneEntityCfg("obstacle_2"), SceneEntityCfg("obstacle_3")]})
+
 
 @configclass
 class RewardsCfg:
@@ -339,10 +328,10 @@ class TerminationsCfg:
     #                          "sensor_cfg": SceneEntityCfg("robot_chassis_contact_sensor"),
     #                      })
 
-    inside_obstacle_term = DoneTerm(func=inside_obstacle_termination,
-                            params={"asset_cfg": SceneEntityCfg("robot"), 
-                                    "multi_obstacle_cfgs": [SceneEntityCfg("obstacle_0"), SceneEntityCfg("obstacle_1"), SceneEntityCfg("obstacle_2"), SceneEntityCfg("obstacle_3")],
-                                    })
+    # inside_obstacle_term = DoneTerm(func=inside_obstacle_termination,
+    #                         params={"asset_cfg": SceneEntityCfg("robot"), 
+    #                                 "multi_obstacle_cfgs": [SceneEntityCfg("obstacle_0"), SceneEntityCfg("obstacle_1"), SceneEntityCfg("obstacle_2"), SceneEntityCfg("obstacle_3")],
+    #                                 })
     
     # time_out_term = DoneTerm(func=mdp.time_out)
 
@@ -368,7 +357,7 @@ class CurriculumCfg:
 @configclass
 class MultiAgentEnvCfg(ManagerBasedRLEnvCfg):
     # Scene settings
-    scene: CarTrainingSceneCfg = CarTrainingSceneCfg(num_envs=1, env_spacing=5.0)
+    scene: CarTrainingSceneCfg = CarTrainingSceneCfg(num_envs=1, env_spacing=7.5)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()

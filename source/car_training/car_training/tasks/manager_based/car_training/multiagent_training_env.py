@@ -79,13 +79,13 @@ class MultiAgentEnv(ManagerBasedRLEnv):
         if env_ids is None:
             env_ids = torch.arange(self.num_envs, device=self.device)
 
-        reset_obstacles_random(self, env_ids=env_ids, obstacle_names=["obstacle_0", "obstacle_1", "obstacle_2", "obstacle_3"],
-                               top_half_only=False,)
+        # reset_obstacles_random(self, env_ids=env_ids, obstacle_names=["obstacle_0", "obstacle_1", "obstacle_2", "obstacle_3"],
+        #                        top_half_only=False,)
         
         N, H, W, _ = self.static_track_image.shape
         device = self.static_track_image.device
         self.obstacle_map = torch.ones((N, 1, H, W), device=device)
-        generate_obstacles_map(self, env_ids=env_ids, multi_obstacle_cfgs=[SceneEntityCfg("obstacle_0"), SceneEntityCfg("obstacle_1"), SceneEntityCfg("obstacle_2"), SceneEntityCfg("obstacle_3")],)
+        # generate_obstacles_map(self, env_ids=env_ids, multi_obstacle_cfgs=[SceneEntityCfg("obstacle_0"), SceneEntityCfg("obstacle_1"), SceneEntityCfg("obstacle_2"), SceneEntityCfg("obstacle_3")],)
         
         return obs, info
 
@@ -108,7 +108,7 @@ class MultiAgentEnv(ManagerBasedRLEnv):
                 torch.save(self.static_track_image.cpu(), f"{ASSET_FOLDER}/scene_assets/multiagent_static_track_image.pt")
             else:
                 # use torch.load to load pre-saved static track image
-                self.static_track_image: torch.Tensor = torch.load(f"{ASSET_FOLDER}/scene_assets/static_track_image_12_env.pt").to(self.device)
+                self.static_track_image: torch.Tensor = torch.load(f"{ASSET_FOLDER}/scene_assets/multiagent_static_track_image.pt").to(self.device)
                 if self.num_envs <= self.static_track_image.shape[0]:
                     # only take into account the first N environments
                     self.static_track_image = self.static_track_image[:self.num_envs]
