@@ -234,6 +234,45 @@ def collision_penalty(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, obstacl
     penalty = -1 * penalty
     return penalty 
 
+def multiagent_collision_penalty(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, collision_threshold: float = 20.0) -> torch.Tensor:
+    """
+    Variable penalty based on proximity to other agents, encouraging the agent to avoid collisions with other agents.
+
+    :param env: The environment instance containing the robot information.
+    :type env: ManagerBasedRLEnv
+    :param asset_cfg: Configuration for the robot to extract its position.
+    :type asset_cfg: SceneEntityCfg
+    :param collision_threshold: Distance threshold for considering a collision.
+    :type collision_threshold: float
+    :return: Collision penalty for each agent.
+    :rtype: torch.Tensor
+
+    """
+    logger = get_logger(env)
+
+    # this includes all positions of all other agents, so we can check distance to all of them at once
+    robot_positions = robot_pos(env, asset_cfg, do_convert_coords=True, global_frame=True)  # (N, 2)
+
+    num_agents = robot_positions.shape[0]
+    if num_agents < 2:
+        return torch.zeros(num_agents, dtype=torch.float, device=robot_positions.device)
+
+    # Pairwise distances between all agents: (N, N)
+    pairwise_dist = torch.cdist(robot_positions, robot_positions, p=2)
+
+    # Ignore self-distances by setting diagonal to +inf
+    pairwise_dist.fill_diagonal_(float("inf"))
+
+    # Collision if an agent is within threshold of any other agent
+    collision_flags = torch.any(pairwise_dist < collision_threshold, dim=1)
+
+    penalty = torch.where(collision_flags, 1, 0).float()
+
+    logger.debug_lazy("Multi-agent collision penalty: %s", lambda: penalty)
+    penalty = -1 * penalty
+    
+    return penalty
+
 
 ############ FOR RESET AGENT ############
 

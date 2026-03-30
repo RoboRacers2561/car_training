@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 CROPPED_IMAGE_SIZE = 48 # Size of the cropped track neighborhood image
-OBSTACLE_CROPPED_IMAGE_SIZE = 48 # Size of the cropped obstacle image
+OBSTACLE_CROPPED_IMAGE_SIZE = 96 # Size of the cropped obstacle image
 FRONT_STEER_NAMES = ["Knuckle__Upright__Front_Right", "Knuckle__Upright__Front_Left"]
 
 
@@ -453,7 +453,7 @@ def generate_agents_map(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> to
         # Scale trapezoid to 75%
         size_scale = 0.75
         top_w = 5 * size_scale
-        bottom_w = 10 * size_scale
+        bottom_w = 15 * size_scale
         length = 10 * size_scale
         h = length / 2
 
@@ -547,7 +547,11 @@ def aligned_other_agents_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg
         align_corners=True,
     )
 
-    crops = F.interpolate(crops, size=(CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), mode="area")
+    # resize the crops to the desired dimension 
+    if CROPPED_IMAGE_SIZE != OBSTACLE_CROPPED_IMAGE_SIZE:
+        crops = F.interpolate(crops, 
+                            size=(CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), 
+                            mode='area')
 
     crops = (crops > 0.5).float()
     
