@@ -122,11 +122,13 @@ def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, do_convert_coor
     asset: RigidObject = env.scene[asset_cfg.name]
     if global_frame:
         relative_pos = asset.data.root_link_pos_w  # Global position in world coordinates
+        track_size = env.cfg.scene.ground_plane.ground_plane_params.multi_agent_track_size
     else:
         relative_pos = asset.data.root_link_pos_w - env.scene.env_origins  # Relative to environment origin
+        track_size = env.cfg.scene.ground_plane.ground_plane_params.each_track_size
     logger.debug_lazy("Car world positions: %s", lambda: relative_pos)
 
-    track_size = env.cfg.scene.ground_plane.ground_plane_params.each_track_size
+    
     camera_width, camera_height = env.unwrapped.get_camera_dimensions()
     logger.debug(f"Track size: {track_size}, Camera width: {camera_width}, Camera height: {camera_height}")
 
@@ -229,7 +231,7 @@ def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEnt
     if imgs.dtype != torch.float32:
         imgs = imgs.float() / 255.0
     imgs = imgs.permute(0, 3, 1, 2)  # (N, 3, H, W)
-    car_xy = robot_pos(env, asset_cfg, do_convert_coords=True)
+    car_xy = robot_pos(env, asset_cfg, do_convert_coords=True, global_frame=True)
     logger.debug_lazy("Car positions (image coords): %s", lambda: car_xy)
 
     # Normalize to [-1, 1] for grid_sample
@@ -254,7 +256,7 @@ def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEnt
     )  # (N, crop, crop, 2)
 
     # Get car headings and compute rotation angles
-    headings = asset_heading = robot_heading(env, asset_cfg)  # (N, 2)
+    headings = robot_heading(env, asset_cfg)  # (N, 2)
     angles = torch.atan2(-headings[:, 0], headings[:, 1]) + torch.pi  # (N,) Negative x to match image coords
 
     cos = torch.cos(angles).view(-1, 1, 1, 1)  # (N,1,1,1)
@@ -298,8 +300,17 @@ def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEnt
     # print(f"track neighborhood image shape: {gray_crops.shape}")
 
     #save debug image
-    debug_img = gray_crops[0, 0].cpu().numpy() * 255
-    cv2.imwrite("debug_track_neighborhood_image.png", debug_img)
+    # debug_img = gray_crops[0, 0].cpu().numpy() * 255
+    # cv2.imwrite("debug_track_neighborhood_image.png", debug_img)
+
+    # draw the robot position on the static track image
+    # static_track_image = env.unwrapped.static_track_image
+    # for i in range(N):
+    #     img = static_track_image[i].cpu().numpy()
+    #     x = int(car_xy[i, 0].item())
+    #     y = int(car_xy[i, 1].item())
+    #     cv2.circle(img, (x, y), 5, (255, 0, 0), -1)
+    #     cv2.imwrite(f"debug_static_track_image_{i}.png", img)
 
     return gray_crops # (N, 1, crop, crop)
 
@@ -421,7 +432,7 @@ def generate_agents_map(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> to
     N = env.unwrapped.num_envs
     H, W = env.unwrapped.static_track_image.shape[1:3]
 
-    map_h, map_w = H * 5, W * 5
+    map_h, map_w = H, W
     agents_map = torch.ones((1, 1, map_h, map_w), device=device, dtype=torch.float32)
 
     # all agents in one global/image frame
@@ -432,8 +443,8 @@ def generate_agents_map(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> to
     canvas = agents_map[0, 0].cpu().numpy()
 
     for i in range(N):
-        cx = robot_xy[i, 0].item() + W * 2
-        cy = robot_xy[i, 1].item() + H * 2
+        cx = robot_xy[i, 0].item()
+        cy = robot_xy[i, 1].item()
 
         # Fix heading
         heading_offset_rad = np.pi / 2.0
@@ -499,8 +510,8 @@ def aligned_other_agents_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg
     # centers for each agent in shared-map pixel coordinates
     robot_xy = robot_pos(env, asset_cfg, do_convert_coords=True, global_frame=True)
     robot_headings = robot_heading(env, asset_cfg)
-    center_x_px = robot_xy[:, 0] + W * 2
-    center_y_px = robot_xy[:, 1] + H * 2
+    center_x_px = robot_xy[:, 0]
+    center_y_px = robot_xy[:, 1]
 
     # normalize centers to [-1, 1] wrt shared map size
     cx = 2.0 * center_x_px / (map_w - 1) - 1.0
@@ -537,10 +548,12 @@ def aligned_other_agents_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg
     )
 
     crops = F.interpolate(crops, size=(CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), mode="area")
+
+    crops = (crops > 0.5).float()
     
     # save debug image 
-    debug_img = crops[0, 0].cpu().numpy() * 255
-    cv2.imwrite("debug_aligned_other_agents_image.png", debug_img)
+    # debug_img = crops[0, 0].cpu().numpy() * 255
+    # cv2.imwrite("debug_aligned_other_agents_image.png", debug_img)
     
     return crops
 

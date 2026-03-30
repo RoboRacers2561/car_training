@@ -55,7 +55,7 @@ def get_logger(env: ManagerBasedRLEnv) -> GpuSafeLogger:
         _LOGGER = base.getChild(short_name)
     return _LOGGER
 
-def distance_from_center_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg) -> torch.Tensor:
+def distance_from_center_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg, global_frame = False) -> torch.Tensor:
     """
     Reward for being close to the center of the track.
 
@@ -67,13 +67,12 @@ def distance_from_center_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCf
     :return: Distance from center reward.
     :rtype: torch.Tensor
     """
-    car_centers = robot_pos(env, robot_cfg, do_convert_coords=True)
+    car_centers = robot_pos(env, robot_cfg, do_convert_coords=True, global_frame=global_frame)
     track_points = env.track_points_tensor  # (num_envs, num_track_points, 2)
     track_points_lengths = env.track_points_lengths  # (num_envs,)
 
     closest_track_points = find_closest_point(car_centers, track_points, track_points_lengths)  # (num_envs, 2)
     distances = torch.norm(car_centers - closest_track_points, dim=1)  #
-
     max_distance = MAX_DISTANCE_FROM_LINE
     normalized_distances = distances / max_distance
     # Reward is higher when the distance is smaller

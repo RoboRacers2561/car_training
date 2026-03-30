@@ -14,7 +14,7 @@ import logging
 import cv2
 from car_training.tasks.manager_based.car_training.multiagent_training_env_cfg import OverheadCameraCfg
 from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image, reset_obstacles_random, generate_obstacles_map
-from car_training.tasks.manager_based.car_training.mdp.utils.helpers import find_track_points_from_image
+from car_training.tasks.manager_based.car_training.mdp.utils.helpers import find_all_tracks
 from isaaclab.envs import ManagerBasedRLEnv
 from isaaclab.managers import SceneEntityCfg
 from car_training.tasks.manager_based.car_training.multiagent_training_env_cfg import MultiAgentEnvCfg
@@ -33,8 +33,8 @@ class MultiAgentEnv(ManagerBasedRLEnv):
         self.logger: GpuSafeLogger = GpuSafeLogger(logger)
 
         self.enable_cameras = enable_cameras
-        if self.enable_cameras:
-            cfg.scene.overhead_camera = OverheadCameraCfg()
+        # if self.enable_cameras:
+        #     cfg.scene.overhead_camera = OverheadCameraCfg()
 
         self.enable_obstacles = enable_obstacles
 
@@ -105,7 +105,7 @@ class MultiAgentEnv(ManagerBasedRLEnv):
                 self.logger.info("Static track image initialized.")
 
                 # save static track image as a .pt file
-                torch.save(self.static_track_image.cpu(), f"{ASSET_FOLDER}/scene_assets/multiagent_static_track_image.pt")
+                # torch.save(self.static_track_image.cpu(), f"{ASSET_FOLDER}/scene_assets/multiagent_static_track_image.pt")
             else:
                 # use torch.load to load pre-saved static track image
                 self.static_track_image: torch.Tensor = torch.load(f"{ASSET_FOLDER}/scene_assets/multiagent_static_track_image.pt").to(self.device)
@@ -133,12 +133,12 @@ class MultiAgentEnv(ManagerBasedRLEnv):
         if len(self.track_points) == 0:
             for index in range(self.num_envs):
                 image_np = self.static_track_image[index].detach().cpu().numpy()
-                track_points = find_track_points_from_image(image_np, debug=index<=30, image_idx=index)
+                track_points = find_all_tracks(image_np, debug=index<=30, image_idx=index)
                 self.track_points.append(track_points)
 
                 # below is needed for random resetting
                 camera_width, camera_height = self.get_camera_dimensions()
-                track_dimensions: tuple = self.scene.cfg.ground_plane.ground_plane_params.each_track_size
+                track_dimensions: tuple = self.scene.cfg.ground_plane.ground_plane_params.multi_agent_track_size
                 # convert to world coordinates
                 world_points = convert_coords_list(track_points, track_dimensions, (camera_width, camera_height), image_to_isaaclab=True)
                 self.track_points_world.append(world_points)
@@ -161,8 +161,7 @@ class MultiAgentEnv(ManagerBasedRLEnv):
             return camera_cfg.width, camera_cfg.height
         else:
             if self.static_track_image is None:
-                print("Warning: Static track image is not initialized. Returning default camera dimensions (512, 386).")
-                return 512, 386
+                return 2048, 2048
             else:
                 return self.static_track_image.shape[2], self.static_track_image.shape[1]
 

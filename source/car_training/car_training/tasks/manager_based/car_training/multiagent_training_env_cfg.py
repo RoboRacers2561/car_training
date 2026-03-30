@@ -32,7 +32,7 @@ from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSt
 from car_training.tasks.manager_based.car_training.configs.leatherback_params import LeatherbackParamsCfg
 from car_training.tasks.manager_based.car_training.configs.ttr_params import TTRNanoParamsCfg
 from car_training.tasks.manager_based.car_training.configs.plane_track_params import GroundPlaceCfg, TrackParamsCfg
-from car_training.tasks.manager_based.car_training.configs.overhead_camera_params import OverheadCameraParamsCfg
+from car_training.tasks.manager_based.car_training.configs.overhead_camera_params_multiagent import OverheadCameraParamsCfg
 from car_training.tasks.manager_based.car_training.mdp.events import reset_robot_root_random, reset_obstacles_random, generate_obstacles_map
 
 import os
@@ -140,7 +140,7 @@ class OverheadCameraCfg(TiledCameraCfg):
     """Configuration for the overhead camera."""
     camera_params = OverheadCameraParamsCfg()
     
-    prim_path: str = "{ENV_REGEX_NS}/OverheadCamera"
+    prim_path: str = "/World/OverheadCamera"
     offset: TiledCameraCfg.OffsetCfg = TiledCameraCfg.OffsetCfg(pos=camera_params.pose.pos, rot=camera_params.pose.rot, convention=camera_params.pose.convention)
     data_types: list = camera_params.image.data_types
     spawn: sim_utils.PinholeCameraCfg = sim_utils.PinholeCameraCfg(
@@ -190,7 +190,7 @@ class CarTrainingSceneCfg(InteractiveSceneCfg):
     )
 
     # overhead camera
-    # overhead_camera: OverheadCameraCfg | None = None
+    # overhead_camera: OverheadCameraCfg = OverheadCameraCfg()
 
     robot_chassis_contact_sensor: ContactSensorCfg = ContactSensorCfg(
         prim_path="{ENV_REGEX_NS}/Robot/Rigid_Bodies/Chassis",
@@ -280,6 +280,7 @@ class RewardsCfg:
         func=distance_from_center_reward,
         params={
             "robot_cfg": SceneEntityCfg("robot"),
+            "global_frame": True
         },
         weight=3.0,
     )

@@ -138,7 +138,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # create isaac environment
     log_level = logging.DEBUG if args_cli.debug else logging.INFO
-    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None, task_name=args_cli.task, console_level=log_level, file_level=log_level)
+    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None, task_name=args_cli.task, console_level=log_level, file_level=log_level, enable_cameras=args_cli.enable_cameras)
 
     # post-process agent configuration
     agent_cfg = process_sb3_cfg(agent_cfg, env.unwrapped.num_envs)
