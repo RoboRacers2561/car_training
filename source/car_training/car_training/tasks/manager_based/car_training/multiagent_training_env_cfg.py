@@ -22,7 +22,12 @@ from car_training.tasks.manager_based.car_training.mdp.observation import  (
     aligned_other_agents_image,
     aligned_obstacle_image
 )
-from car_training.tasks.manager_based.car_training.mdp.termination import off_track_termination, collision_termination, inside_obstacle_termination
+from car_training.tasks.manager_based.car_training.mdp.termination import ( 
+    off_track_termination, 
+    collision_termination, 
+    inside_obstacle_termination,
+    multiagent_collision_termination
+)
 from car_training.tasks.manager_based.car_training.mdp.actions import ThrottleSteerAckermannAction
 from car_training.tasks.manager_based.car_training.configs.leatherback_params import LeatherbackParamsCfg
 from car_training.tasks.manager_based.car_training.configs.ttr_params import TTRNanoParamsCfg
@@ -321,6 +326,12 @@ class TerminationsCfg:
     # Out of bounds termination
     out_of_bounds = DoneTerm(func=off_track_termination, 
                              params={"asset_cfg": SceneEntityCfg("robot")},)
+    
+    # collision termination
+    collision = DoneTerm(func=multiagent_collision_termination,
+                            params={"asset_cfg": SceneEntityCfg("robot"), 
+                                    "collision_threshold": 20.0,
+                                    })
 
     # collision_chassis = DoneTerm(func=mdp.terminations.illegal_contact,
     #                      params={
@@ -332,7 +343,6 @@ class TerminationsCfg:
     #                         params={"asset_cfg": SceneEntityCfg("robot"), 
     #                                 "multi_obstacle_cfgs": [SceneEntityCfg("obstacle_0"), SceneEntityCfg("obstacle_1"), SceneEntityCfg("obstacle_2"), SceneEntityCfg("obstacle_3")],
     #                                 })
-    
     # time_out_term = DoneTerm(func=mdp.time_out)
 
 

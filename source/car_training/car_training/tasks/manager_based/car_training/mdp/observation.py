@@ -298,8 +298,8 @@ def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEnt
     # print(f"track neighborhood image shape: {gray_crops.shape}")
 
     #save debug image
-    # debug_img = gray_crops[0, 0].cpu().numpy() * 255
-    # cv2.imwrite("debug_track_neighborhood_image.png", debug_img)
+    debug_img = gray_crops[0, 0].cpu().numpy() * 255
+    cv2.imwrite("debug_track_neighborhood_image.png", debug_img)
 
     return gray_crops # (N, 1, crop, crop)
 
@@ -410,83 +410,77 @@ def aligned_obstacle_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, mu
 
 def generate_agents_map(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     """
-    Generate a map of the agents in the environment, where the current agent is at the center and other agents are represented as black trapezoids.
+    Generate ONE shared map containing all agents as black trapezoids.
 
     Returns:
-        torch.Tensor: A tensor of shape (N, 1, H, W) representing the map of agents.
+        torch.Tensor: shape (1, 1, H_map, W_map)
     """
+
+    # TODO: vectorize asap
     device = env.unwrapped.device
     N = env.unwrapped.num_envs
     H, W = env.unwrapped.static_track_image.shape[1:3]
 
-    # blank obstacle map in same resolution as track image
-    agents_map = torch.ones((N, 1, H*5, W*5), device=device) # times 5 since this is for 5x5 map of envs
+    map_h, map_w = H * 5, W * 5
+    agents_map = torch.ones((1, 1, map_h, map_w), device=device, dtype=torch.float32)
 
-    # get positions and headings of all agents
-    robot_xy = robot_pos(env, asset_cfg, do_convert_coords=True, global_frame=True) # get global positions to plot all agents on the same map
+    # all agents in one global/image frame
+    robot_xy = robot_pos(env, asset_cfg, do_convert_coords=True, global_frame=True)
     robot_headings = robot_heading(env, asset_cfg)
 
-    # draw trapezoids for each agent on the map
+    # draw on a single canvas
+    canvas = agents_map[0, 0].cpu().numpy()
+
     for i in range(N):
+        cx = robot_xy[i, 0].item() + W * 2
+        cy = robot_xy[i, 1].item() + H * 2
 
-        cx = robot_xy[i, 0].item() + W*2 # shift to center of the map
-        cy = robot_xy[i, 1].item() + H*2
+        # Fix heading
+        heading_offset_rad = np.pi / 2.0
+        theta = torch.atan2(robot_headings[i, 1], robot_headings[i, 0]).item() + heading_offset_rad
 
-        theta = torch.atan2(
-            robot_headings[i,1],
-            robot_headings[i,0]
-        ).item()
-
-        # trapezoid parameters
-        top_w = 5
-        bottom_w = 10
-        length = 10
+        # Scale trapezoid to 75%
+        size_scale = 0.75
+        top_w = 5 * size_scale
+        bottom_w = 10 * size_scale
+        length = 10 * size_scale
         h = length / 2
 
         pts = torch.tensor([
-            [-top_w/2, -h],
-            [ top_w/2, -h],
-            [ bottom_w/2, h],
-            [-bottom_w/2, h],
+            [-top_w / 2, -h],
+            [ top_w / 2, -h],
+            [ bottom_w / 2,  h],
+            [-bottom_w / 2,  h],
         ], device=device)
 
-        c = torch.cos(torch.tensor(theta))
-        s = torch.sin(torch.tensor(theta))
-
-        R = torch.tensor([[c,-s],[s,c]], device=device)
+        c = torch.cos(torch.tensor(theta, device=device))
+        s = torch.sin(torch.tensor(theta, device=device))
+        R = torch.tensor([[c, -s], [s, c]], device=device)
 
         pts = pts @ R.T
-
-        pts[:,0] += cx
-        pts[:,1] += cy
-
+        pts[:, 0] += cx
+        pts[:, 1] += cy
         pts = pts.long()
 
-        canvas = agents_map[i,0].cpu().numpy()
         cv2.fillPoly(canvas, [pts.cpu().numpy()], 0)
-        agents_map[i,0] = torch.tensor(canvas, device=device)
 
+    agents_map[0, 0] = torch.from_numpy(canvas).to(device=device, dtype=torch.float32)
     # save debug image
-    debug_img = agents_map[0, 0].cpu().numpy() * 255
-    cv2.imwrite("debug_agents_map.png", debug_img)
-
+    # debug_img = agents_map[0, 0].cpu().numpy() * 255
+    # cv2.imwrite("debug_agents_map.png", debug_img)
     return agents_map
 
 
 def aligned_other_agents_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     """
-    Generate aligned image of other agents in frame, using the agent map.
+    Generate aligned image of other agents in frame, using one shared agent map.
 
     Returns:
         torch.Tensor: (N, 1, crop, crop)
     """
-
     logger = get_logger(env)
 
-    if hasattr(env.unwrapped, 'static_track_image') and env.unwrapped.static_track_image is not None:
-        pass
-    else:
-        # return a dummy image if static image is not available
+    if not (hasattr(env.unwrapped, "static_track_image") and env.unwrapped.static_track_image is not None):
         num_envs = env.unwrapped.num_envs
         logger.warning("static track image not found, returning dummy gray image")
         return torch.zeros((num_envs, 1, CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), device=env.unwrapped.device, dtype=torch.float32)
@@ -495,73 +489,59 @@ def aligned_other_agents_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg
     N = env.unwrapped.num_envs
     crop = OBSTACLE_CROPPED_IMAGE_SIZE
 
-    # Image size from static map
-    imgs = env.unwrapped.static_track_image
-    N, H, W, _ = imgs.shape
+    # base tile dimensions
+    _, H, W, _ = env.unwrapped.static_track_image.shape
 
-    # these contain ALL agents, so it contains all information needed to plot the other agents relative to the current agent
-    robot_xy = robot_pos(env, asset_cfg, do_convert_coords=True, global_frame=True) # get global positions to plot all agents on the same map
+    # shared map with all agents
+    agents_map = generate_agents_map(env, asset_cfg)  # (1,1,H*5,W*5)
+    map_h, map_w = agents_map.shape[-2], agents_map.shape[-1]
+
+    # centers for each agent in shared-map pixel coordinates
+    robot_xy = robot_pos(env, asset_cfg, do_convert_coords=True, global_frame=True)
     robot_headings = robot_heading(env, asset_cfg)
+    center_x_px = robot_xy[:, 0] + W * 2
+    center_y_px = robot_xy[:, 1] + H * 2
 
-    # get agent map with all agents plotted as trapezoids
-    agents_map = generate_agents_map(env, asset_cfg)
-
-
-    # ----- SAME ROTATION / CROPPING AS TRACK FUNCTION -----
-
-    cx = 2.0 * robot_xy[:, 0] / (W - 1) - 1.0
-    cy = 2.0 * robot_xy[:, 1] / (H - 1) - 1.0
+    # normalize centers to [-1, 1] wrt shared map size
+    cx = 2.0 * center_x_px / (map_w - 1) - 1.0
+    cy = 2.0 * center_y_px / (map_h - 1) - 1.0
 
     lin = torch.linspace(-1, 1, crop, device=device)
     dy, dx = torch.meshgrid(lin, lin, indexing="ij")
+    dx = dx[None] * (crop / map_w)
+    dy = dy[None] * (crop / map_h)
 
-    dx = dx[None] * (crop / W)
-    dy = dy[None] * (crop / H)
+    grid = torch.stack((cx[:, None, None] + dx, cy[:, None, None] + dy), dim=-1)
 
-    grid = torch.stack(
-        (
-            cx[:, None, None] + dx,
-            cy[:, None, None] + dy,
-        ),
-        dim=-1,
-    )
+    angles = torch.atan2(-robot_headings[:, 0], robot_headings[:, 1]) + torch.pi
+    cos = torch.cos(angles).view(-1, 1, 1, 1)
+    sin = torch.sin(angles).view(-1, 1, 1, 1)
 
-    headings = robot_headings
-    angles = torch.atan2(-headings[:, 0], headings[:, 1]) + torch.pi
-
-    cos = torch.cos(angles).view(-1,1,1,1)
-    sin = torch.sin(angles).view(-1,1,1,1)
-
-    center = torch.stack((cx, cy), dim=-1).view(-1,1,1,2)
+    center = torch.stack((cx, cy), dim=-1).view(-1, 1, 1, 2)
     rel = grid - center
-
-    rel_x = rel[...,0:1]
-    rel_y = rel[...,1:2]
+    rel_x = rel[..., 0:1]
+    rel_y = rel[..., 1:2]
 
     rot_x = cos * rel_x - sin * rel_y
     rot_y = sin * rel_x + cos * rel_y
-
     grid = torch.cat((rot_x, rot_y), dim=-1) + center
 
+    # reuse one map for all N crops
+    agents_map_batched = agents_map.expand(N, -1, -1, -1)
     crops = F.grid_sample(
-        agents_map,
+        agents_map_batched,
         grid,
         mode="bilinear",
         padding_mode="border",
         align_corners=True,
     )
 
-    logger.debug("Obtained aligned obstacle images.")
-
-    # resize the crops to the desired dimension 
-    crops = F.interpolate(crops, 
-                          size=(CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), 
-                          mode='area')
-
-    # save debug image
+    crops = F.interpolate(crops, size=(CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), mode="area")
+    
+    # save debug image 
     debug_img = crops[0, 0].cpu().numpy() * 255
-    #cv2.imwrite("debug_aligned_agent_image.png", debug_img)
-
+    cv2.imwrite("debug_aligned_other_agents_image.png", debug_img)
+    
     return crops
 
 

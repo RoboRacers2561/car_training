@@ -240,6 +240,41 @@ def collision_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, obs
     logger.debug_lazy("Collision flags: %s", lambda: collision_flags)
     return collision_flags
 
+
+
+def multiagent_collision_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, collision_threshold: float = 20.0) -> torch.Tensor:
+    """
+    Vectorized termination function that ends an episode if the car 'collides' (is too close) with any other agent.
+
+    Args:
+        env: The environment instance.
+        state: The current state of the environment.
+    Returns:
+        torch.Tensor: A tensor indicating which episodes should terminate.
+    """
+    logger = get_logger(env)
+
+    # this includes all positions of all other agents, so we can check distance to all of them at once
+    robot_positions = robot_pos(env, asset_cfg, do_convert_coords=True, global_frame=True)  # (N, 2)
+
+    num_agents = robot_positions.shape[0]
+    if num_agents < 2:
+        return torch.zeros(num_agents, dtype=torch.bool, device=robot_positions.device)
+
+    # Pairwise distances between all agents: (N, N)
+    pairwise_dist = torch.cdist(robot_positions, robot_positions, p=2)
+
+    # Ignore self-distances by setting diagonal to +inf
+    pairwise_dist.fill_diagonal_(float("inf"))
+
+    # Collision if an agent is within threshold of any other agent
+    collision_flags = torch.any(pairwise_dist < collision_threshold, dim=1)
+
+    logger.debug_lazy("Multi-agent collision flags: %s", lambda: collision_flags)
+    return collision_flags
+
+
+
 def wheel_contact_with_other_car(env, sensor_name: str, threshold: float = 1.0):
     sensor = env.scene[sensor_name]
 
