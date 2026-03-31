@@ -22,7 +22,7 @@ from car_training.tasks.manager_based.car_training.mdp.utils.training_logging im
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
-CROPPED_IMAGE_SIZE = 48 # Size of the cropped track neighborhood image
+CROPPED_IMAGE_SIZE = 96 # Size of the cropped track neighborhood image
 OBSTACLE_CROPPED_IMAGE_SIZE = 96 # Size of the cropped obstacle image
 FRONT_STEER_NAMES = ["Knuckle__Upright__Front_Right", "Knuckle__Upright__Front_Left"]
 

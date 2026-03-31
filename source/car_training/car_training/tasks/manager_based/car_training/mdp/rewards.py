@@ -273,6 +273,29 @@ def multiagent_collision_penalty(env: ManagerBasedRLEnv, asset_cfg: SceneEntityC
     
     return penalty
 
+def going_forward_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """
+    Reward for going forward, calculated as the component of the robot's velocity in the direction of the track.
+
+    :param env: The environment instance containing the robot and track information.
+    :type env: ManagerBasedRLEnv
+
+    :return: Going forward reward.
+    :rtype: torch.Tensor
+    """
+    logger = get_logger(env)
+
+    logger.debug("Calculating going forward reward...")
+
+    drive = env.action_manager._terms["drive"]
+    throttle = drive._processed_actions[:, 0]  # (N,)
+
+    # if throttle is positive, reward is proportional to throttle, if negative, reward is zero (don't penalize going backwards, just don't reward it)
+    reward = torch.where(throttle > 0, throttle / drive.max_throttle, torch.zeros_like(throttle))
+    logger.debug_lazy("Throttle for going forward reward: %s", lambda: throttle)
+    logger.debug_lazy("Going forward reward: %s", lambda: reward)
+    return reward
+
 
 ############ FOR RESET AGENT ############
 

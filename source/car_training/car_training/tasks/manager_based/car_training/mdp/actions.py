@@ -32,6 +32,9 @@ MIN_THROTTLE_DRIVING_AGENT = 10
 MAX_THROTTLE_RESET_AGENT = 30
 MIN_THROTTLE_RESET_AGENT = -15
 
+MAX_THROTTLE_MULTI_AGENT = 30
+MIN_THROTTLE_MULTI_AGENT = -10
+
 def ackermann_to_wheel_angles(delta_center: torch.Tensor,
                              wheelbase: float,
                              trackwidth: float,
@@ -101,12 +104,15 @@ class ThrottleSteerAckermannAction(ActionTerm):
 
         self.max_steer = MAX_STEER
 
-        if env.unwrapped.task_name == "Basic-Car-Training-v0" or env.unwrapped.task_name == "Multiagent-Car-Training-v0":
+        if env.unwrapped.task_name == "Basic-Car-Training-v0":
             self.max_throttle = MAX_THROTTLE_DRIVING_AGENT
             self.min_throttle = MIN_THROTTLE_DRIVING_AGENT
         elif env.unwrapped.task_name == "Reset-Agent":
             self.max_throttle = MAX_THROTTLE_RESET_AGENT
             self.min_throttle = MIN_THROTTLE_RESET_AGENT
+        elif env.unwrapped.task_name == "Multiagent-Car-Training-v0":
+            self.max_throttle = MAX_THROTTLE_MULTI_AGENT
+            self.min_throttle = MIN_THROTTLE_MULTI_AGENT
         else:
             raise ValueError(f"Unknown task name {env.unwrapped.task_name} for setting throttle limits")
         

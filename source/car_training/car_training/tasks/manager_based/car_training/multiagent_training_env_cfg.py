@@ -14,7 +14,7 @@ from isaaclab.sensors import TiledCameraCfg, ContactSensorCfg
 from isaaclab.actuators import ImplicitActuatorCfg
 
 from . import mdp
-from car_training.tasks.manager_based.car_training.mdp.rewards import distance_from_center_reward, steering_jerk_penalty, velocity_reward, remains_alive_reward, turning_penalty, multiagent_collision_penalty
+from car_training.tasks.manager_based.car_training.mdp.rewards import distance_from_center_reward, steering_jerk_penalty, velocity_reward, remains_alive_reward, turning_penalty, multiagent_collision_penalty, going_forward_reward
 from car_training.tasks.manager_based.car_training.mdp.observation import  (
     aligned_track_neighborhood_image,
     robot_vel,
@@ -279,6 +279,11 @@ class RewardsCfg:
             "robot_cfg": SceneEntityCfg("robot"),
             "global_frame": True
         },
+        weight=3.0,
+    )
+
+    going_forward_rew_term = RewTerm(
+        func=going_forward_reward,
         weight=3.0,
     )
 
