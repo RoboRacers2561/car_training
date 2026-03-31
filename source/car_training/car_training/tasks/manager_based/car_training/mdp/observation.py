@@ -10,6 +10,7 @@ from isaaclab.managers import SceneEntityCfg
 import logging
 
 import cv2
+import math
 import copy
 import torch
 import torch.nn.functional as F
@@ -422,63 +423,103 @@ def aligned_obstacle_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, mu
 def generate_agents_map(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     """
     Generate ONE shared map containing all agents as black trapezoids.
+    GPU-friendly PyTorch version (no cv2 / no numpy).
 
     Returns:
-        torch.Tensor: shape (1, 1, H_map, W_map)
+        torch.Tensor: shape (1, 1, H_map, W_map), float32
+                     white background = 1.0, agents = 0.0
     """
-
-    # TODO: vectorize asap
     device = env.unwrapped.device
+    dtype = torch.float32
+
     N = env.unwrapped.num_envs
     H, W = env.unwrapped.static_track_image.shape[1:3]
 
-    map_h, map_w = H, W
-    agents_map = torch.ones((1, 1, map_h, map_w), device=device, dtype=torch.float32)
+    agents_map = torch.ones((1, 1, H, W), device=device, dtype=dtype)
 
-    # all agents in one global/image frame
-    robot_xy = robot_pos(env, asset_cfg, do_convert_coords=True, global_frame=True)
-    robot_headings = robot_heading(env, asset_cfg)
+    # Agent poses in global/image coordinates
+    robot_xy = robot_pos(env, asset_cfg, do_convert_coords=True, global_frame=True).to(device=device, dtype=dtype)
+    robot_headings = robot_heading(env, asset_cfg).to(device=device, dtype=dtype)
 
-    # draw on a single canvas
-    canvas = agents_map[0, 0].cpu().numpy()
+    # -------------------------
+    # Trapezoid geometry
+    # -------------------------
+    heading_offset_rad = math.pi / 2.0
 
-    for i in range(N):
-        cx = robot_xy[i, 0].item()
-        cy = robot_xy[i, 1].item()
+    size_scale = 0.75
+    top_w = 5.0 * size_scale
+    bottom_w = 15.0 * size_scale
+    length = 10.0 * size_scale
+    h = length / 2.0
 
-        # Fix heading
-        heading_offset_rad = np.pi / 2.0
-        theta = torch.atan2(robot_headings[i, 1], robot_headings[i, 0]).item() + heading_offset_rad
+    top_half = top_w / 2.0
+    bottom_half = bottom_w / 2.0
 
-        # Scale trapezoid to 75%
-        size_scale = 0.75
-        top_w = 5 * size_scale
-        bottom_w = 15 * size_scale
-        length = 10 * size_scale
-        h = length / 2
+    # A square patch large enough to contain any rotated trapezoid
+    patch_radius = int(math.ceil(math.sqrt(bottom_half**2 + h**2))) + 2
+    patch_size = 2 * patch_radius + 1
 
-        pts = torch.tensor([
-            [-top_w / 2, -h],
-            [ top_w / 2, -h],
-            [ bottom_w / 2,  h],
-            [-bottom_w / 2,  h],
-        ], device=device)
+    # Local integer offsets for the patch
+    offs = torch.arange(-patch_radius, patch_radius + 1, device=device, dtype=dtype)
+    dy_patch, dx_patch = torch.meshgrid(offs, offs, indexing="ij")   # shape (P, P)
 
-        c = torch.cos(torch.tensor(theta, device=device))
-        s = torch.sin(torch.tensor(theta, device=device))
-        R = torch.tensor([[c, -s], [s, c]], device=device)
+    # Expand to all agents: shape (N, P, P)
+    cx = robot_xy[:, 0].view(N, 1, 1)   # x = column
+    cy = robot_xy[:, 1].view(N, 1, 1)   # y = row
 
-        pts = pts @ R.T
-        pts[:, 0] += cx
-        pts[:, 1] += cy
-        pts = pts.long()
+    x_global = cx + dx_patch.unsqueeze(0)
+    y_global = cy + dy_patch.unsqueeze(0)
 
-        cv2.fillPoly(canvas, [pts.cpu().numpy()], 0)
+    # Pixel indices for writing into image
+    x_idx = torch.round(x_global).long()
+    y_idx = torch.round(y_global).long()
 
-    agents_map[0, 0] = torch.from_numpy(canvas).to(device=device, dtype=torch.float32)
+    in_bounds = (x_idx >= 0) & (x_idx < W) & (y_idx >= 0) & (y_idx < H)
+
+    # -------------------------
+    # Compute local coordinates
+    # -------------------------
+    theta = torch.atan2(robot_headings[:, 1], robot_headings[:, 0]) + heading_offset_rad
+    c = torch.cos(theta).view(N, 1, 1)
+    s = torch.sin(theta).view(N, 1, 1)
+
+    # Relative coordinates in global image frame
+    dx = x_global - cx
+    dy = y_global - cy
+
+    # Inverse rotation: global -> local trapezoid frame
+    # local y points along vehicle length
+    x_local = c * dx + s * dy
+    y_local = -s * dx + c * dy
+
+    # -------------------------
+    # Analytic trapezoid test
+    # -------------------------
+    # Width changes linearly from top to bottom as y goes from -h to +h
+    t = (y_local + h) / length
+    half_width = top_half + t * (bottom_half - top_half)
+
+    inside = (
+        (y_local >= -h) &
+        (y_local <= h) &
+        (torch.abs(x_local) <= half_width)
+    )
+
+    mask = inside & in_bounds
+
+    # -------------------------
+    # Paint all trapezoids black
+    # -------------------------
+    flat_mask = mask.reshape(-1)
+    flat_y = y_idx.reshape(-1)[flat_mask]
+    flat_x = x_idx.reshape(-1)[flat_mask]
+
+    agents_map[0, 0, flat_y, flat_x] = 0.0
+
     # save debug image
     # debug_img = agents_map[0, 0].cpu().numpy() * 255
     # cv2.imwrite("debug_agents_map.png", debug_img)
+
     return agents_map
 
 
