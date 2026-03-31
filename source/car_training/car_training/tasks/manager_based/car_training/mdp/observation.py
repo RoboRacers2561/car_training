@@ -532,11 +532,16 @@ def aligned_other_agents_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg
     """
     logger = get_logger(env)
 
-    if not (hasattr(env.unwrapped, "static_track_image") and env.unwrapped.static_track_image is not None):
+    if hasattr(env.unwrapped, 'static_track_image') and env.unwrapped.static_track_image is not None:
+        pass
+    else:
+        # return a dummy stack of images if static image is not available
         num_envs = env.unwrapped.num_envs
-        logger.warning("static track image not found, returning dummy gray image")
-        return torch.zeros((num_envs, 1, CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), device=env.unwrapped.device, dtype=torch.float32)
+        dummy_img = torch.ones((num_envs, 1, CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE))
 
+        stack_size = 4
+        return dummy_img.repeat(1, stack_size, 1, 1)
+    
     device = env.unwrapped.device
     N = env.unwrapped.num_envs
     crop = OBSTACLE_CROPPED_IMAGE_SIZE
@@ -545,7 +550,7 @@ def aligned_other_agents_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg
     _, H, W, _ = env.unwrapped.static_track_image.shape
 
     # shared map with all agents
-    agents_map = generate_agents_map(env, asset_cfg)  # (1,1,H*5,W*5)
+    agents_map = generate_agents_map(env, asset_cfg)
     map_h, map_w = agents_map.shape[-2], agents_map.shape[-1]
 
     # centers for each agent in shared-map pixel coordinates
@@ -595,12 +600,49 @@ def aligned_other_agents_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg
                             mode='area')
 
     crops = (crops > 0.5).float()
+
+    # Here is where we initialize the stacked obstacle images
+    if not hasattr(env, "_obstacle_image_stack"):
+        stack_size = 4
+        num_envs, _, H, W = crops.shape
+        env._stack_size = stack_size
+        env._obstacle_image_stack = crops.repeat(1, stack_size, 1, 1)
+        env._obstacle_stack_initialized = torch.zeros(num_envs, dtype=torch.bool, device=device)
+
+    if not hasattr(env, "stack_step_counters"):
+        env.stack_step_counters = torch.zeros(num_envs, dtype=torch.int32, device=device)
+
+    stack = env._obstacle_image_stack
+
+    # find which envs need initialization (first time or after reset)
+    to_init = ~env._obstacle_stack_initialized
+
+    if to_init.any():
+        stack[to_init] = crops[to_init].repeat(1, env._stack_size, 1, 1)
+        env._obstacle_stack_initialized[to_init] = True
+        env.stack_step_counters[to_init] = 0
+
+    already_init = env._obstacle_stack_initialized & (~to_init)
+
+    # sample only when counter reaches frequency
+    to_update = already_init & (env.stack_step_counters >= env.stack_frequency_steps)
+
+    if to_update.any():
+        stack[to_update, 1:] = stack[to_update, :-1].clone()
+        stack[to_update, 0] = crops[to_update, 0]
+        env.stack_step_counters[to_update] = 0
+
+    # envs that were initialized but not updated this step
+    not_updated = already_init & (~to_update)
+    if not_updated.any():
+        env.stack_step_counters[not_updated] += 1
     
-    # save debug image 
-    # debug_img = crops[0, 0].cpu().numpy() * 255
-    # cv2.imwrite("debug_aligned_other_agents_image.png", debug_img)
+    # save all stacked images for debugging for env 0
+    # for j in range(env._stack_size):
+    #     debug_img = stack[0, j].cpu().numpy() * 255
+    #     cv2.imwrite(f"debug_other_agents_stack_env{0}_frame{j}.png", debug_img)
     
-    return crops
+    return stack
 
 
 def aligned_robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, normalize: bool) -> torch.Tensor:

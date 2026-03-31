@@ -456,6 +456,10 @@ def generate_obstacles_map(
 
     env.unwrapped.obstacle_map[env_ids, 0] = batch_map
 
+def reset_stacked_obstacles_images(env, env_ids: torch.Tensor):
+    env.unwrapped._obstacle_stack_initialized[env_ids] = False
+    env.unwrapped.stack_step_counters[env_ids] = 0
+
 def choose_rand_point(pts) -> list[float, float]:
     """
     Choose a random point from a list of points.

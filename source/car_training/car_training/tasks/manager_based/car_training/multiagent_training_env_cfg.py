@@ -33,7 +33,7 @@ from car_training.tasks.manager_based.car_training.configs.leatherback_params im
 from car_training.tasks.manager_based.car_training.configs.ttr_params import TTRNanoParamsCfg
 from car_training.tasks.manager_based.car_training.configs.plane_track_params import GroundPlaceCfg, TrackParamsCfg
 from car_training.tasks.manager_based.car_training.configs.overhead_camera_params_multiagent import OverheadCameraParamsCfg
-from car_training.tasks.manager_based.car_training.mdp.events import reset_robot_root_random, reset_obstacles_random, generate_obstacles_map
+from car_training.tasks.manager_based.car_training.mdp.events import reset_stacked_obstacles_images
 
 import os
 from pathlib import Path
@@ -257,10 +257,7 @@ class EventCfg:
     # reset
     reset_robot_position = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
-    # reset_obstacles_position = EventTerm(func=reset_obstacles_random, mode="reset", params={"obstacle_names": ["obstacle_0", "obstacle_1", "obstacle_2", "obstacle_3"],
-    #                                                                                         "z": 0.06, "top_half_only": False})
-    # generating_obs_map = EventTerm(func=generate_obstacles_map, mode="reset", params={"multi_obstacle_cfgs": [SceneEntityCfg("obstacle_0"), SceneEntityCfg("obstacle_1"), SceneEntityCfg("obstacle_2"), SceneEntityCfg("obstacle_3")]})
-
+    reset_stacked_obstacles_images_term = EventTerm(func=reset_stacked_obstacles_images, mode="reset")
 
 @configclass
 class RewardsCfg:
