@@ -19,7 +19,7 @@ class ResidualBlock(nn.Module):
         return F.relu(out)
 
 class CustomMultiInputExtractor(BaseFeaturesExtractor):
-    def __init__(self, observation_space, features_dim=128):
+    def __init__(self, observation_space, features_dim=256):
         super().__init__(observation_space, features_dim)
 
         track_image_space = observation_space.spaces["track_image"]
@@ -28,20 +28,20 @@ class CustomMultiInputExtractor(BaseFeaturesExtractor):
 
         # --- CNN with residual blocks ---
         self.cnn = nn.Sequential(
-            nn.Conv2d(in_channels=track_image_space.shape[0] + obstacle_image_space.shape[0], out_channels=16, kernel_size=5, stride=2, padding=2),
-            nn.BatchNorm2d(16),
-            nn.ReLU(),
-            ResidualBlock(16),
-
-            nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),
+            nn.Conv2d(in_channels=track_image_space.shape[0] + obstacle_image_space.shape[0], out_channels=32, kernel_size=5, stride=2, padding=2),
             nn.BatchNorm2d(32),
             nn.ReLU(),
             ResidualBlock(32),
 
-            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(32),
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm2d(64),
             nn.ReLU(),
-            ResidualBlock(32),
+            ResidualBlock(64),
+
+            nn.Conv2d(64, 64, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            ResidualBlock(64),
 
             nn.Flatten(),
         )
@@ -54,21 +54,22 @@ class CustomMultiInputExtractor(BaseFeaturesExtractor):
             print(f"image shape: {track_image_space.shape}")
 
         self.image_fc = nn.Sequential(
-            nn.Linear(n_flatten, 128),
+            nn.Linear(n_flatten, 256),
             nn.ReLU(),
         )
 
         # --- Velocity branch ---
         self.vel_fc = nn.Sequential(
-            nn.Linear(vel_space.shape[0], 32),
+            nn.Linear(vel_space.shape[0], 64),
             nn.ReLU(),
         )
 
         # --- Fusion ---
         self.fc = nn.Sequential(
-            nn.Linear(128 + 32, 128),
+            nn.Linear(256 + 64, 256),
             nn.ReLU(),
-            nn.Linear(128, features_dim),
+            nn.Linear(256, features_dim),
+
         )
 
     def forward(self, observations):
