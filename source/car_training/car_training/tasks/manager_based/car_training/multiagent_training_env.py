@@ -111,10 +111,10 @@ class MultiAgentEnv(ManagerBasedRLEnv):
                 self.logger.info("Static track image initialized.")
 
                 # save static track image as a .pt file
-                # torch.save(self.static_track_image.cpu(), f"{ASSET_FOLDER}/scene_assets/multiagent_static_track_image.pt")
+                # torch.save(self.static_track_image.cpu(), f"{ASSET_FOLDER}/scene_assets/multiagent_static_track_image_isolated.pt")
             else:
                 # use torch.load to load pre-saved static track image
-                self.static_track_image: torch.Tensor = torch.load(f"{ASSET_FOLDER}/scene_assets/multiagent_static_track_image.pt").to(self.device)
+                self.static_track_image: torch.Tensor = torch.load(f"{ASSET_FOLDER}/scene_assets/multiagent_static_track_image_isolated.pt").to(self.device)
                 if self.num_envs <= self.static_track_image.shape[0]:
                     # only take into account the first N environments
                     self.static_track_image = self.static_track_image[:self.num_envs]
