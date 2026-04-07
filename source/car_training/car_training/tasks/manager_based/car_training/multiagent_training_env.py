@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 import torch
+import numpy as np
 from torch.nn.utils.rnn import pad_sequence
 from pathlib import Path
 
@@ -13,7 +14,7 @@ ASSET_FOLDER = Path(__file__).resolve().parents[0] / "assets"
 import logging
 import cv2
 from car_training.tasks.manager_based.car_training.multiagent_training_env_cfg import OverheadCameraCfg
-from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image, reset_obstacles_random, generate_obstacles_map
+from car_training.tasks.manager_based.car_training.mdp.events import init_static_track_image, reset_obstacles_random, generate_obstacles_map, reset_robot_root_random_multiagent
 from car_training.tasks.manager_based.car_training.mdp.utils.helpers import find_all_tracks
 from isaaclab.envs import ManagerBasedRLEnv
 from isaaclab.managers import SceneEntityCfg
@@ -43,9 +44,12 @@ class MultiAgentEnv(ManagerBasedRLEnv):
         self._static_track_inited = False
         self.static_track_image = None # will be initialized on first reset
         self.track_points = [] # will be initialized on first reset
+        self.track_points_by_track = [] # per-env list of isolated track point groups
         self.track_points_tensor = torch.empty((self.num_envs, 0, 2), device=self.device) # tensor version of track points for easier processing in rewards and termination, to be filled after reset
 
         self.track_points_world = [] # track points in world coordinates, to be filled after reset
+        self.track_points_world_by_track = [] # world-space isolated track point groups
+        self.multiagent_track_ids = None # fixed track assignment for each environment
 
         self.action_driver: ThrottleSteerAckermannAction = self.action_manager._terms["drive"] # this is a ThrottleSteerAckermannAction
 
@@ -81,12 +85,26 @@ class MultiAgentEnv(ManagerBasedRLEnv):
         self.__init_static_track_image_if_needed()
         self.__init_track_points_if_needed()
 
+        if self.multiagent_track_ids is None and len(self.track_points_world_by_track) > 0:
+            first_track_group_set = self.track_points_world_by_track[0]
+            num_tracks = len(first_track_group_set)
+            self.multiagent_track_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long) % num_tracks
+
         
         if env_ids is None:
             env_ids = torch.arange(self.num_envs, device=self.device)
 
-        # reset_obstacles_random(self, env_ids=env_ids, obstacle_names=["obstacle_0", "obstacle_1", "obstacle_2", "obstacle_3"],
-        #                        top_half_only=False,)
+        if len(self.track_points_world_by_track) > 0:
+            reset_robot_root_random_multiagent(
+                self,
+                env_ids=env_ids,
+                asset_cfg=SceneEntityCfg("robot"),
+                z=0.05,
+                yaw_noise_std=0.6,
+                lookahead=5,
+                xy_rand_radius=0.0,
+                min_spawn_distance=1.5,
+            )
         
         N, H, W, _ = self.static_track_image.shape
         device = self.static_track_image.device
@@ -111,10 +129,10 @@ class MultiAgentEnv(ManagerBasedRLEnv):
                 self.logger.info("Static track image initialized.")
 
                 # save static track image as a .pt file
-                # torch.save(self.static_track_image.cpu(), f"{ASSET_FOLDER}/scene_assets/multiagent_static_track_image.pt")
+                # torch.save(self.static_track_image.cpu(), f"{ASSET_FOLDER}/scene_assets/multiagent_static_track_image_isolated.pt")
             else:
                 # use torch.load to load pre-saved static track image
-                self.static_track_image: torch.Tensor = torch.load(f"{ASSET_FOLDER}/scene_assets/multiagent_static_track_image.pt").to(self.device)
+                self.static_track_image: torch.Tensor = torch.load(f"{ASSET_FOLDER}/scene_assets/multiagent_static_track_image_isolated.pt").to(self.device)
                 if self.num_envs <= self.static_track_image.shape[0]:
                     # only take into account the first N environments
                     self.static_track_image = self.static_track_image[:self.num_envs]
@@ -139,20 +157,59 @@ class MultiAgentEnv(ManagerBasedRLEnv):
         if len(self.track_points) == 0:
             for index in range(self.num_envs):
                 image_np = self.static_track_image[index].detach().cpu().numpy()
-                track_points = find_all_tracks(image_np, debug=index<=30, image_idx=index)
-                self.track_points.append(track_points)
+                track_groups = self._extract_track_groups_from_image(image_np, debug=index<=30, image_idx=index)
+
+                if len(track_groups) == 0:
+                    track_points = find_all_tracks(image_np, debug=index<=30, image_idx=index)
+                    track_groups = [np.asarray(track_points)]
+
+                flat_track_points = np.concatenate(track_groups, axis=0)
+                self.track_points.append(flat_track_points)
+                self.track_points_by_track.append(track_groups)
 
                 # below is needed for random resetting
                 camera_width, camera_height = self.get_camera_dimensions()
                 track_dimensions: tuple = self.scene.cfg.ground_plane.ground_plane_params.multi_agent_track_size
                 # convert to world coordinates
-                world_points = convert_coords_list(track_points, track_dimensions, (camera_width, camera_height), image_to_isaaclab=True)
+                world_points = convert_coords_list(flat_track_points, track_dimensions, (camera_width, camera_height), image_to_isaaclab=True)
                 self.track_points_world.append(world_points)
+
+                world_groups = [convert_coords_list(track_group, track_dimensions, (camera_width, camera_height), image_to_isaaclab=True) for track_group in track_groups]
+                self.track_points_world_by_track.append(world_groups)
             
             seqs = [torch.as_tensor(tp, device=self.device, dtype=torch.float32) for tp in self.track_points]
             self.track_points_tensor = pad_sequence(seqs, batch_first=True, padding_value=0.0)
             self.track_points_lengths = torch.tensor([len(tp) for tp in self.track_points], device=self.device)
             self.logger.info("Track points initialized from static track image.")
+
+
+    def _extract_track_groups_from_image(self, image_np, debug: bool = False, image_idx: int = 0):
+        """Extract separate closed-loop track contours from a static camera image."""
+        hsv = cv2.cvtColor(image_np, cv2.COLOR_BGR2HSV)
+        lower_black = np.array([0, 0, 0])
+        upper_black = np.array([180, 255, 80])
+        binary = cv2.inRange(hsv, lower_black, upper_black)
+
+        contours, _ = cv2.findContours(binary, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+        track_groups = []
+        for contour in contours:
+            track_points = contour.squeeze()
+            if track_points.ndim == 1:
+                continue
+            if len(track_points) < 2:
+                continue
+            track_groups.append(np.asarray(track_points))
+
+        track_groups.sort(key=lambda pts: len(pts), reverse=True)
+
+        if debug:
+            debug_image = image_np.copy()
+            for pts in track_groups:
+                for point in pts:
+                    cv2.circle(debug_image, (int(point[0]), int(point[1])), 2, (0, 255, 0), -1)
+            # cv2.imwrite(f"{ASSET_FOLDER}/scene_assets/debug_multiagent_tracks_{image_idx}.png", debug_image)
+
+        return track_groups
             
 
     def get_camera_dimensions(self) -> tuple[int, int]:

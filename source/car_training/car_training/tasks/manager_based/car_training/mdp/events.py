@@ -156,6 +156,18 @@ def reset_robot_root_random(
     
     """
 
+    if hasattr(env.unwrapped, "track_points_world_by_track") and len(env.unwrapped.track_points_world_by_track) > 0:
+        return reset_robot_root_random_multiagent(
+            env,
+            env_ids,
+            asset_cfg,
+            z=z,
+            yaw_noise_std=yaw_noise_std,
+            lookahead=lookahead,
+            xy_rand_radius=xy_rand_radius,
+            top_half_only=top_half_only,
+        )
+
     logger = get_logger(env)
 
     robot = env.scene[asset_cfg.name]
@@ -233,6 +245,167 @@ def reset_robot_root_random(
         logger.debug("Robot reset position for env %d: (%.3f, %.3f, %.3f).", eid, pos[k,0], pos[k,1], pos[k,2])
 
     # yaw -> quaternion (w,x,y,z)
+    half = 0.5 * yaw
+    qw = torch.cos(half)
+    qz = torch.sin(half)
+    quat = torch.stack([qw, torch.zeros_like(qw), torch.zeros_like(qw), qz], dim=-1)
+
+    robot.write_root_pose_to_sim(torch.cat([pos, quat], dim=-1), env_ids=env_ids)
+    robot.write_root_velocity_to_sim(torch.zeros((n, 6), device=device), env_ids=env_ids)
+
+
+def reset_robot_root_random_multiagent(
+    env,
+    env_ids: torch.Tensor,
+    asset_cfg,
+    z: float = 0.05,
+    yaw_noise_std: float = 0,
+    lookahead: int = 10,
+    xy_rand_radius: float = 0,
+    top_half_only: bool = False,
+    min_spawn_distance: float = 3,
+    track_groups_attr: str = "track_points_world_by_track",
+    track_ids_attr: str = "multiagent_track_ids",
+    max_tries: int = 1000,
+):
+    """
+    Reset a multiagent robot onto one of several isolated loop tracks.
+
+    Each environment keeps a fixed track assignment, and reset candidates are rejected if they
+    spawn too close to other cars on the same track.
+    """
+
+    logger = get_logger(env)
+
+    robot = env.scene[asset_cfg.name]
+    device = env.device
+    n = env_ids.numel()
+
+    track_groups = getattr(env.unwrapped, track_groups_attr, None)
+    if not track_groups:
+        return reset_robot_root_random(
+            env,
+            env_ids,
+            asset_cfg,
+            z=z,
+            yaw_noise_std=yaw_noise_std,
+            lookahead=lookahead,
+            xy_rand_radius=xy_rand_radius,
+            top_half_only=top_half_only,
+        )
+
+    per_env_track_groups = (
+        len(track_groups) == env.num_envs
+        and len(track_groups) > 0
+        and isinstance(track_groups[0], (list, tuple))
+        and len(track_groups[0]) > 0
+        and isinstance(track_groups[0][0], (list, tuple, np.ndarray, torch.Tensor))
+    )
+
+    reference_groups = track_groups[0] if per_env_track_groups else track_groups
+    num_tracks = len(reference_groups)
+
+    track_ids = getattr(env.unwrapped, track_ids_attr, None)
+    if track_ids is None or len(track_ids) != env.num_envs:
+        track_ids = torch.arange(env.num_envs, device=device, dtype=torch.long) % num_tracks
+        setattr(env.unwrapped, track_ids_attr, track_ids)
+    else:
+        track_ids = torch.as_tensor(track_ids, device=device, dtype=torch.long)
+
+    pos = torch.empty((n, 3), device=device, dtype=torch.float32)
+    yaw = torch.empty((n,), device=device, dtype=torch.float32)
+
+    reserved_xy: dict[int, list[tuple[float, float]]] = {track_id: [] for track_id in range(num_tracks)}
+
+    if hasattr(robot.data, "root_pos_w"):
+        current_xy = robot.data.root_pos_w[:, :2].detach()
+        reset_set = set(env_ids.tolist())
+        for eid in range(env.num_envs):
+            if eid in reset_set:
+                continue
+            track_id = int(track_ids[eid].item())
+            if 0 <= track_id < num_tracks:
+                reserved_xy[track_id].append((float(current_xy[eid, 0]), float(current_xy[eid, 1])))
+
+    for k, eid in enumerate(env_ids.tolist()):
+        track_id = int(track_ids[eid].item())
+        current_track_groups = track_groups[eid] if per_env_track_groups else track_groups
+        pts = current_track_groups[track_id]
+
+        if len(pts) < 2:
+            raise RuntimeError(f"Not enough track points to reset robot position for track {track_id}.")
+
+        if top_half_only:
+            pts = [point for point in pts if float(point[1]) >= 0.0]
+            if len(pts) < 2:
+                raise RuntimeError(f"Not enough top-half track points to reset robot position for track {track_id}.")
+
+        chosen = None
+        debug_info = None
+        for _ in range(max_tries):
+            L = len(pts)
+            j = int(torch.randint(0, L, (1,), device=device).item())
+
+            x0, y0 = pts[j]
+
+            j2 = (j + lookahead) % L
+            x1, y1 = pts[j2]
+            dx = float(x1) - float(x0)
+            dy = float(y1) - float(y0)
+            if dx == 0.0 and dy == 0.0:
+                j2 = (j + 1) % L
+                x1, y1 = pts[j2]
+                dx = float(x1) - float(x0)
+                dy = float(y1) - float(y0)
+
+            yaw_k = math.atan2(dy, dx)
+            if yaw_noise_std and yaw_noise_std > 0:
+                yaw_k += float(torch.randn((), device=device) * yaw_noise_std)
+            if torch.rand((), device=device) < 0.5:
+                yaw_k += math.pi
+
+            angle = torch.rand((), device=device) * 2 * math.pi
+            distance = torch.rand((), device=device) * xy_rand_radius
+            shift_x = float(distance) * math.cos(float(angle))
+            shift_y = float(distance) * math.sin(float(angle))
+
+            candidate_x = float(x0) + shift_x
+            candidate_y = float(y0) + shift_y
+
+            ok = True
+            for px, py in reserved_xy[track_id]:
+                if math.hypot(candidate_x - px, candidate_y - py) < min_spawn_distance:
+                    ok = False
+                    break
+
+            if ok:
+                chosen = (candidate_x, candidate_y, yaw_k)
+                debug_info = (j, j2, dx, dy, shift_x, shift_y)
+                reserved_xy[track_id].append((candidate_x, candidate_y))
+                break
+
+        if chosen is None:
+            raise RuntimeError(
+                f"Could not find a collision-free spawn point for env {eid} on track {track_id}."
+            )
+
+        x, y, yaw_k = chosen
+        j, j2, dx, dy, shift_x, shift_y = debug_info
+        logger.debug(
+            "Resetting multiagent robot in env %d on track %d to track point %d (lookahead %d to point %d) with delta (%.3f, %.3f) and shift (%.3f, %.3f).",
+            eid, track_id, j, lookahead, j2, dx, dy, shift_x, shift_y,
+        )
+
+        pos[k, 0] = x
+        pos[k, 1] = y
+        pos[k, 2] = float(z)
+        yaw[k] = yaw_k
+
+        logger.debug(
+            "Multiagent robot reset position for env %d: (%.3f, %.3f, %.3f).",
+            eid, pos[k, 0], pos[k, 1], pos[k, 2],
+        )
+
     half = 0.5 * yaw
     qw = torch.cos(half)
     qz = torch.sin(half)
