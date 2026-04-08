@@ -33,7 +33,7 @@ def get_logger(env: ManagerBasedRLEnv) -> GpuSafeLogger:
         _LOGGER = base.getChild(short_name)
     return _LOGGER
 
-def off_track_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, middle_only = False) -> torch.Tensor:
+def off_track_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, middle_only = True) -> torch.Tensor:
     """
     Vectorized termination function that ends an episode if the car goes off track.
 

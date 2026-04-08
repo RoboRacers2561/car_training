@@ -175,7 +175,7 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     return penalty
 
 
-def turning_penalty(env: ManagerBasedRLEnv, robot_cfg, multi_obstacle_cfgs) -> torch.Tensor:
+def turning_penalty(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg) -> torch.Tensor:
     """
     Penalty for large steering angles, encouraging the reset agent to take smoother turns.
 
