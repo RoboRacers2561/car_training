@@ -25,7 +25,7 @@ from car_training.tasks.manager_based.car_training.mdp.observation import (
     robot_pos,
     aligned_robot_vel,
     robot_vel,
-    aligned_obstacle_image
+    aligned_other_agents_image
 )
 from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import (
     GpuSafeLogger,
@@ -77,6 +77,15 @@ def distance_from_center_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCf
     normalized_distances = distances / max_distance
     # Reward is higher when the distance is smaller
     reward = 1.0 - normalized_distances
+
+    obstacle_imgs = aligned_other_agents_image(env, robot_cfg)
+    obstacle_mask_dims = tuple(range(1, obstacle_imgs.ndim))
+    has_obstacle_pixel = torch.any(
+        obstacle_imgs < 0.12,
+        dim=obstacle_mask_dims,
+    )
+   # If there is an obstacle, make the reward for line following 0
+    reward = torch.where(has_obstacle_pixel, torch.zeros_like(reward), reward)
     return reward
 
 def velocity_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg) -> torch.Tensor:
@@ -186,15 +195,15 @@ def turning_penalty(env: ManagerBasedRLEnv, robot_cfg, multi_obstacle_cfgs) -> t
 
     penalty = -1 * torch.abs(steer) / drive.max_steer # divide by max_steer to normalize
 
-    obstacle_imgs = aligned_obstacle_image(env, robot_cfg, multi_obstacle_cfgs)  # (N, 1, H, W)
-    obstacle_imgs = obstacle_imgs.squeeze(1)  # (N, H, W)
+    obstacle_imgs = aligned_other_agents_image(env, robot_cfg)
+    obstacle_mask_dims = tuple(range(1, obstacle_imgs.ndim))
     has_obstacle_pixel = torch.any(
-        obstacle_imgs < 0.12,  # assuming obstacle pixels are bright in the image
-        dim=(1, 2),
+        obstacle_imgs < 0.12,
+        dim=obstacle_mask_dims,
     )
 
     # penalty turns into reward if in proximity of an obstacle
-    penalty = torch.where(has_obstacle_pixel, -penalty, penalty)
+    penalty = torch.where(has_obstacle_pixel, torch.zeros_like(penalty), penalty)
 
     logger.debug_lazy("Steering angles for turning penalty: %s", lambda: steer)
     logger.debug_lazy("Turning penalty: %s", lambda: penalty)

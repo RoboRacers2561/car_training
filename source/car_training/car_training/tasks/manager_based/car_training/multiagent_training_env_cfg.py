@@ -20,7 +20,6 @@ from car_training.tasks.manager_based.car_training.mdp.observation import  (
     robot_vel,
     aligned_robot_vel,
     aligned_other_agents_image,
-    aligned_obstacle_image
 )
 from car_training.tasks.manager_based.car_training.mdp.termination import ( 
     off_track_termination, 
