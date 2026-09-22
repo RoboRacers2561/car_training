@@ -37,12 +37,10 @@ from car_training.tasks.manager_based.car_training.mdp.events import reset_stack
 import os
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).parents[6].resolve()
-leatherback_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/robot_assets/leatherback_simple_better.usd")
+ASSET_ROOT = Path(os.environ.get("CAR_TRAINING_ASSET_ROOT", Path(__file__).parent / "assets")).expanduser().resolve()
+leatherback_usd_path = str(ASSET_ROOT / "robot_assets/leatherback_simple_better.usd")
+TRACK_USD_PATH = str(ASSET_ROOT / "scene_assets/tracks/track_marl_map.usd")
 
-# Track USD paths
-track_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/scene_assets/tracks/")
-TRACK_USD_PATH = track_usd_path + "track_marl_map.usd"
 
 
 ## 
@@ -139,7 +137,7 @@ class OverheadCameraCfg(TiledCameraCfg):
     """Configuration for the overhead camera."""
     camera_params = OverheadCameraParamsCfg()
     
-    prim_path: str = "/World/OverheadCamera"
+    prim_path: str = "{ENV_REGEX_NS}/OverheadCamera"
     offset: TiledCameraCfg.OffsetCfg = TiledCameraCfg.OffsetCfg(pos=camera_params.pose.pos, rot=camera_params.pose.rot, convention=camera_params.pose.convention)
     data_types: list = camera_params.image.data_types
     spawn: sim_utils.PinholeCameraCfg = sim_utils.PinholeCameraCfg(

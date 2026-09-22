@@ -1,7 +1,10 @@
 # RC car simulation training
 
-The Brev A6000 bring-up passed rendering, 32 simulation steps and a 64-timestep
-PPO update using generated assets. See [run evidence](docs/bringup.md).
+This checkout is on `multiagent-training-env`. The Brev A6000 test passed with
+four cars, 32 control steps, and 128 PPO agent-timesteps using generated assets.
+See [the full training story](docs/training-story.md) for policy inputs, actions,
+rewards, architecture, and learning issues; [bring-up evidence](docs/bringup.md)
+also preserves the earlier single-car result on `main`.
 
 ## Overview
 
@@ -81,7 +84,7 @@ Generate a self-contained six-joint car and 12 identical circular-track USDs:
 ```bash
 uv run --locked --group assets python scripts/generate_test_assets.py
 export CAR_TRAINING_ASSET_ROOT="$PWD/generated_assets"
-./scripts/isaac.sh scripts/smoke_test.py --headless --enable_cameras --fixture --train
+./scripts/isaac.sh scripts/smoke_test.py --task Multiagent-Car-Training-v0 --num_envs 4 --headless --enable_cameras --fixture --train --output outputs/multiagent
 ```
 
 The generator works on the Mac as well as Linux. It refuses to overwrite a
@@ -90,11 +93,14 @@ nonempty output directory. The fixtures need no external meshes or textures;
 wheel joint names and chassis sensor path. They are **uncalibrated test assets**,
 not a replacement for the physical car model or evidence of useful driving skill.
 
-The bounded smoke test runs the actual `Basic-Car-Training-v0` task, checks finite
-observations/rewards/poses and vehicle movement, then optionally runs 64 PPO
-training timesteps and saves `outputs/smoke/fixture_ppo.zip` and `result.json`.
+The bounded smoke test runs the actual `Multiagent-Car-Training-v0` task, checks
+finite observations/rewards/poses and movement excluding reset jumps, then runs
+at least 64 PPO agent-timesteps (rounded to a full rollout: 128 with four cars).
+It saves a checkpoint, `result.json`, camera render, and a policy-input panel in
+`outputs/multiagent/`. The panel shows track then four car-history channels.
 Fixture-specific camera, timestep, and actuator overrides stay in the smoke test.
-Start with one environment; use `--num_envs 2` only after the first run succeeds.
+Use `--num_envs 2` for the initial check on a 16 GB desktop. The four-car test
+is verified only on the A6000.
 
 For the original model, set `CAR_TRAINING_ASSET_ROOT` to the recovered asset bundle
 (or unset it to use the package's `assets/` directory). It must contain
@@ -104,6 +110,8 @@ referenced meshes/textures. The alternate TTR configuration references
 `robot_assets/ttr_nano_v1.usd`. The generator only supplies the active Leatherback
 interface. Do not run the original training configuration on fixture geometry
 without the fixture overrides.
+
+**Historical single-car commands from `main`; not revalidated on this branch:**
 
 ```bash
 ./scripts/isaac.sh scripts/zero_agent.py --task Basic-Car-Training-v0 --num_envs 1 --headless --enable_cameras

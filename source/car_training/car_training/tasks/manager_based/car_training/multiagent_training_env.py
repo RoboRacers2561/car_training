@@ -7,8 +7,6 @@ import numpy as np
 from torch.nn.utils.rnn import pad_sequence
 from pathlib import Path
 
-PORJECT_ROOT = Path(__file__).resolve().parents[8]
-print(f"Project root: {PORJECT_ROOT}")
 ASSET_FOLDER = Path(__file__).resolve().parents[0] / "assets"
     
 import logging
@@ -34,8 +32,11 @@ class MultiAgentEnv(ManagerBasedRLEnv):
         self.logger: GpuSafeLogger = GpuSafeLogger(logger)
 
         self.enable_cameras = enable_cameras
-        # if self.enable_cameras:
-        #     cfg.scene.overhead_camera = OverheadCameraCfg()
+        if self.enable_cameras and getattr(cfg.scene, "overhead_camera", None) is None:
+            cfg.scene.overhead_camera = OverheadCameraCfg()
+        if self.enable_cameras:
+            # All cameras observe the same world; env slots are cars, not arenas.
+            cfg.scene.env_spacing = 0.0
 
         self.enable_obstacles = enable_obstacles
 
@@ -99,11 +100,7 @@ class MultiAgentEnv(ManagerBasedRLEnv):
                 self,
                 env_ids=env_ids,
                 asset_cfg=SceneEntityCfg("robot"),
-                z=0.05,
-                yaw_noise_std=0.6,
-                lookahead=5,
-                xy_rand_radius=0.0,
-                min_spawn_distance=1.5,
+                **{k: v for k, v in self.cfg.events.reset_robot_position_random_marl.params.items() if k != "asset_cfg"},
             )
         
         N, H, W, _ = self.static_track_image.shape
@@ -111,7 +108,8 @@ class MultiAgentEnv(ManagerBasedRLEnv):
         self.obstacle_map = torch.ones((N, 1, H, W), device=device)
         # generate_obstacles_map(self, env_ids=env_ids, multi_obstacle_cfgs=[SceneEntityCfg("obstacle_0"), SceneEntityCfg("obstacle_1"), SceneEntityCfg("obstacle_2"), SceneEntityCfg("obstacle_3")],)
         
-        return obs, info
+        self.obs_buf = self.observation_manager.compute()
+        return self.obs_buf, info
 
 
     def __init_static_track_image_if_needed(self) -> None:
@@ -124,7 +122,10 @@ class MultiAgentEnv(ManagerBasedRLEnv):
         """
         if not self._static_track_inited:
             if self.enable_cameras:
-                self.static_track_image = init_static_track_image(self, camera_name="overhead_camera")
+                captured = init_static_track_image(self, camera_name="overhead_camera")
+                # This is one shared arena. Use one map for every car so small
+                # camera/render differences cannot create inconsistent track IDs.
+                self.static_track_image = captured[:1].expand(self.num_envs, -1, -1, -1)
                 self._static_track_inited = True
                 self.logger.info("Static track image initialized.")
 
@@ -190,7 +191,7 @@ class MultiAgentEnv(ManagerBasedRLEnv):
         upper_black = np.array([180, 255, 80])
         binary = cv2.inRange(hsv, lower_black, upper_black)
 
-        contours, _ = cv2.findContours(binary, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
         track_groups = []
         for contour in contours:
             track_points = contour.squeeze()
