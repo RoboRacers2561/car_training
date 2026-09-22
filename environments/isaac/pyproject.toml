@@ -1,0 +1,37 @@
+[project]
+name = "car-training-isaac"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "isaacsim[all,extscache]==5.1.0",
+  "isaaclab", "isaaclab-assets", "isaaclab-tasks", "isaaclab-rl[sb3]",
+  "car-training", "setuptools<81", "torch==2.7.0", "torchvision==0.22.0", "torchaudio==2.7.0",
+  "opencv-python==4.11.0.86", "stable-baselines3==2.7.0",
+]
+
+[tool.uv]
+package = false
+build-constraint-dependencies = ["setuptools<81"]
+# NVIDIA index metadata differs from the actual 5.1 Linux wheel for these pins.
+# Match the installed wheel's Requires-Dist; validated by uv pip check on Linux.
+override-dependencies = ["filelock==3.13.1", "fsspec==2024.6.1", "networkx==3.3"]
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+
+[tool.uv.sources]
+car-training = { path = "../../source/car_training", editable = true }
+isaaclab = { path = "../../.isaaclab/source/isaaclab", editable = true }
+isaaclab-assets = { path = "../../.isaaclab/source/isaaclab_assets", editable = true }
+isaaclab-tasks = { path = "../../.isaaclab/source/isaaclab_tasks", editable = true }
+isaaclab-rl = { path = "../../.isaaclab/source/isaaclab_rl", editable = true }
+torch = { index = "pytorch" }
+torchvision = { index = "pytorch" }
+torchaudio = { index = "pytorch" }
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[[tool.uv.index]]
+name = "nvidia"
+url = "https://pypi.nvidia.com"

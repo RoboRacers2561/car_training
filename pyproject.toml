@@ -1,0 +1,13 @@
+[project]
+name = "car-training-dev"
+version = "0.1.0"
+description = "Local development tools for the Isaac Lab car-training extension"
+requires-python = ">=3.11,<3.12"
+dependencies = []
+
+[dependency-groups]
+dev = ["pre-commit>=4,<5"]
+assets = ["usd-core==25.5.1"]
+
+[tool.uv]
+package = false

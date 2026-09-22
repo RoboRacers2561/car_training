@@ -15,6 +15,12 @@
 **/*.usdz
 
 # Python
+.venv/
+**/.venv/
+/generated_assets/
+.venv-isaac/
+.uv-cache/
+.python/
 .DS_Store
 **/*.egg-info/
 **/__pycache__/
@@ -72,3 +78,6 @@ tests/
 
 # Temporary files
 source/car_training/car_training/tasks/manager_based/car_training/mdp/utils/test_data
+
+# Pinned upstream runtime checkout (created by setup_isaac.sh)
+/.isaaclab/
