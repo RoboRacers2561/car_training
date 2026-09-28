@@ -1,5 +1,11 @@
 # What this project actually trains
 
+> Historical code analysis: September 22, 2026, before the `astra-cleanup`
+> behavior corrections. It is useful for understanding the inherited system,
+> not a specification of the current working tree. See [current architecture](architecture.md),
+> [current workflow](../README.md) and the [experiment registry](../experiments/README.md).
+> This notice was added on September 27; the original analysis below is preserved.
+
 This describes the `multiagent-training-env` branch, recovered from upstream
 commit `7e60abb`, and the small generated-asset bring-up. It describes executable
 code, not claims about historical trained policies. The original USD model and

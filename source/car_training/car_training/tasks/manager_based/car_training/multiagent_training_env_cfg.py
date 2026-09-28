@@ -231,10 +231,10 @@ class ObservationsCfg:
         # observation terms (order preserved)
         track_image = ObsTerm(func=aligned_track_neighborhood_image,
                         params={"asset_cfg": SceneEntityCfg("robot"),},
-                        clip=(0.0, 255.0),)
+                        clip=(0.0, 255.0), scale=255.0,)
         obstacle_image = ObsTerm(func=aligned_other_agents_image, # needs robot and obstacle cfg to find the relative pose and then align the image accordingly
                         params={"asset_cfg": SceneEntityCfg("robot"),}, 
-                        clip=(0.0, 255.0),)
+                        clip=(0.0, 255.0), scale=255.0,)
         robot_vel = ObsTerm(func=aligned_robot_vel,
                                 params={"asset_cfg": SceneEntityCfg("robot"), "normalize": True},
                                 )

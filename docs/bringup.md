@@ -1,5 +1,12 @@
 # Recovery bring-up
 
+> Historical snapshot: September 21–22, 2026. Host names, cloud state, commands
+> and behavior descriptions below are evidence from that session, not current
+> instructions. Do not resume or allocate from this page. Use the [current
+> workflow](../README.md), [operations runbook](../ops/README.md) and
+> [experiment registry](../experiments/README.md). This notice was added on
+> September 27; the historical record below is preserved.
+
 ## Environment
 
 - Tested host: Brev `surprised-emerald-hawk`, Ubuntu 22.04.5 x86_64.

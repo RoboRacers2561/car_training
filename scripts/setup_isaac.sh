@@ -1,19 +1,12 @@
 #!/usr/bin/env bash
-# Upstream Isaac Lab needs an editable checkout: wheels omit config/apps assets.
+# Install the pinned official Isaac Lab distribution into the one root environment.
 set -euo pipefail
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
-ISAACLAB_REV=3c6e67bb5c7ada942a6d1884ab69338f57596f77 # v2.3.0
-if [[ ! -e .isaaclab ]]; then
-    git clone --branch v2.3.0 --depth 1 https://github.com/isaac-sim/IsaacLab.git .isaaclab
+if [[ "$(uname -s)" != Linux || "$(uname -m)" != x86_64 ]]; then
+    echo 'Isaac setup requires Linux x86_64; no runtime installation was attempted.' >&2
+    exit 2
 fi
-if [[ "$(git -C .isaaclab rev-parse HEAD)" != "$ISAACLAB_REV" ]]; then
-    echo 'Unexpected Isaac Lab commit. Move the existing .isaaclab checkout aside and rerun.' >&2
-    exit 1
-fi
-if [[ -n "$(git -C .isaaclab status --porcelain)" ]]; then
-    echo 'Isaac Lab checkout has local changes; refusing a non-reproducible install.' >&2
-    exit 1
-fi
-uv sync --locked --project environments/isaac
-uv pip check --python environments/isaac/.venv/bin/python
+uv sync --locked --no-group cpu --extra isaac
+uv pip check --python .venv/bin/python
+.venv/bin/python -c 'from rc_car.provenance import inspect_isaaclab_runtime; inspect_isaaclab_runtime()'

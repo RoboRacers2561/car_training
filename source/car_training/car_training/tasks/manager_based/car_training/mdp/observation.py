@@ -17,7 +17,13 @@ import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 import numpy as np
 from isaaclab.assets import RigidObject
-from car_training.tasks.manager_based.car_training.mdp.utils.helpers import convert_coords, find_closest_point
+from car_training.tasks.manager_based.car_training.mdp.utils.helpers import find_closest_point
+from rc_car.core.geometry import (
+    convert_coordinates as convert_coords,
+    heading_to_image_vector,
+    legacy_aligned_velocity,
+    world_velocity_to_image,
+)
 from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import GpuSafeLogger
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
@@ -61,10 +67,9 @@ def robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor
     logger = get_logger(env)
     asset: RigidObject = env.scene[asset_cfg.name]
 
-    relative_vel = asset.data.root_com_lin_vel_w[:, :2] # Return x, y velocity
-
-    # make y velocity negative to match image coordinates
-    relative_vel[:, 1] *= -1
+    # Return an independent image-frame velocity tensor. The previous slice
+    # followed by an in-place sign flip mutated the simulator's cached state.
+    relative_vel = world_velocity_to_image(asset.data.root_com_lin_vel_w)
 
     logger.debug_lazy("Car velocities: %s", lambda: relative_vel)
     return relative_vel
@@ -106,7 +111,7 @@ def robot_heading(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Te
     logger.debug_lazy("Car heading: %s", lambda: robot_heading)
 
     # make a unit vector
-    robot_heading = torch.stack((torch.cos(robot_heading), -torch.sin(robot_heading)), dim=-1) # negative y to match image coords
+    robot_heading = heading_to_image_vector(robot_heading)
     return robot_heading
 
 def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, do_convert_coords: bool = False, global_frame: bool = False) -> torch.Tensor:
@@ -190,7 +195,7 @@ def single_obstacle_heading(env: ManagerBasedRLEnv, obstacle_cfg: SceneEntityCfg
     logger.debug_lazy("Obstacle heading: %s", lambda: obstacle_heading)
 
     # make a unit vector
-    obstacle_heading = torch.stack((torch.cos(obstacle_heading), -torch.sin(obstacle_heading)), dim=-1) # negative y to match image coords
+    obstacle_heading = heading_to_image_vector(obstacle_heading)
     return obstacle_heading
 
 def multi_obstacles_heading(env: ManagerBasedRLEnv, obstacle_cfgs: list[SceneEntityCfg]) -> torch.Tensor:
@@ -203,10 +208,18 @@ def multi_obstacles_heading(env: ManagerBasedRLEnv, obstacle_cfgs: list[SceneEnt
 
     return headings
 
-def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, hide_previous_track: bool = False) -> torch.Tensor:
+def aligned_track_neighborhood_image(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg,
+    hide_previous_track: bool = False,
+    global_frame: bool = True,
+) -> torch.Tensor:
     """
     Get the track neighborhood image rotated and aligned with the car's heading.
     The car's heading will always point towards the top of the image.
+    Shared-track callers retain global coordinates by default. Independent Basic
+    arenas explicitly pass global_frame=False to subtract each arena's origin
+    and use its local track dimensions.
 
     Returns:
         torch.Tensor: Aligned grayscale images of shape (N, 1, crop, crop).
@@ -232,7 +245,7 @@ def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEnt
     if imgs.dtype != torch.float32:
         imgs = imgs.float() / 255.0
     imgs = imgs.permute(0, 3, 1, 2)  # (N, 3, H, W)
-    car_xy = robot_pos(env, asset_cfg, do_convert_coords=True, global_frame=True)
+    car_xy = robot_pos(env, asset_cfg, do_convert_coords=True, global_frame=global_frame)
     logger.debug_lazy("Car positions (image coords): %s", lambda: car_xy)
 
     # Normalize to [-1, 1] for grid_sample
@@ -660,33 +673,16 @@ def aligned_robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, normali
     logger = get_logger(env)
     asset: RigidObject = env.scene[asset_cfg.name]
 
-    relative_vel = asset.data.root_com_lin_vel_w[:, :2]  # (N, 2)
-
     if hasattr(env.unwrapped, 'action_driver'):
         driver = env.unwrapped.action_driver
         max_throttle = driver.max_throttle
         if max_throttle != 30:
             logger.warning(f"Unexpected throttle limits for speed normalization: max_throttle={max_throttle}. Speed normalization may be incorrect.")
-    if normalize:
-        max_speed = 0.8  # 0.8 m/s corresponds to 30 rad/s for inside the action space
-        relative_vel = relative_vel / max_speed
-
-
-    heading = asset.data.heading_w  # (N,)
-
-    # Heading + pi/2 to rotate velocity into car frame
-    cos_heading = torch.cos(-heading - np.pi/2) # (N,)
-    sin_heading = torch.sin(-heading - np.pi/2) # (N,)
-
-    rot_matrix = torch.stack(
-        [
-            torch.stack([cos_heading, -sin_heading], dim=-1),
-            torch.stack([sin_heading, cos_heading], dim=-1),
-        ],
-        dim=-2,
-    )  # (N, 2, 2)
-
-    local_vel = torch.bmm(rot_matrix, relative_vel.unsqueeze(-1)).squeeze(-1)  # (N, 2)
+    local_vel = legacy_aligned_velocity(
+        asset.data.root_com_lin_vel_w,
+        asset.data.heading_w,
+        normalization_speed_mps=0.8 if normalize else None,
+    )
 
     logger.debug_lazy("Car local frame velocities: %s", lambda: local_vel)
     return local_vel

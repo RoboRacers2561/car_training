@@ -33,7 +33,12 @@ def get_logger(env: ManagerBasedRLEnv) -> GpuSafeLogger:
         _LOGGER = base.getChild(short_name)
     return _LOGGER
 
-def off_track_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, middle_only = True) -> torch.Tensor:
+def off_track_termination(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg,
+    middle_only: bool = True,
+    global_frame: bool = True,
+) -> torch.Tensor:
     """
     Vectorized termination function that ends an episode if the car goes off track.
 
@@ -46,7 +51,9 @@ def off_track_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, mid
     logger = get_logger(env)
 
     # Get track neigborhborhood image & if not black pixels, terminate
-    track_imgs = aligned_track_neighborhood_image(env, asset_cfg)  # (N, 1, H, W)
+    track_imgs = aligned_track_neighborhood_image(
+        env, asset_cfg, global_frame=global_frame
+    )  # (N, 1, H, W)
     gray_imgs = track_imgs.squeeze(1)  # (N, H, W)
     # Check for black pixels
     black_pixel_threshold = 0.12  # Define a threshold to consider a pixel as black

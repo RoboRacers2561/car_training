@@ -1,212 +1,124 @@
-# RC car simulation training
+# RC-car research and simulation
 
-This checkout is on `multiagent-training-env`. The Brev A6000 test passed with
-four cars, 32 control steps, and 128 PPO agent-timesteps using generated assets.
-See [the full training story](docs/training-story.md) for policy inputs, actions,
-rewards, architecture, and learning issues; [bring-up evidence](docs/bringup.md)
-also preserves the earlier single-car result on `main`.
+An inspectable SB3 + Isaac research workspace on `astra-cleanup`. Keep one
+configuration, attributable experiments and visible driving evidence. **Tests
+and a higher reward curve are not proof of correct physics or useful driving.**
 
-## Overview
+## One workflow
 
-Isaac Lab environments and Stable-Baselines3 training for Ackermann-steered RC
-cars. Project code stays separate from the pinned upstream Isaac Lab checkout.
-
-**Key Features:**
-
-- `Isolation` Works outside the core Isaac Lab repository, ensuring development efforts remain self-contained.
-- `Flexibility` This repo is set up to allow for the code to be run as an extension in Omniverse.
-
-
-## Installation
-
-Use **uv** for this repository. It is already supported by Isaac Lab's installation
-workflow, and this project is a Python extension with no existing Conda dependency
-specification. Pixi is useful when a project needs Conda-managed native libraries;
-that does not remove Isaac Sim's separate GPU, driver, and operating-system requirements.
-
-### Local development (including Apple Silicon Macs)
-
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if needed, then
-run these commands from this repository:
+Edit [config.yaml](config.yaml), then run the same command from this checkout:
 
 ```bash
-uv sync --locked
-uv run --locked pre-commit validate-config
-uv run --locked python -m compileall -q scripts source/car_training
+uv run rc-car
 ```
 
-The root `pyproject.toml` and `uv.lock` manage Python 3.11 development tools in
-`.venv`. The actual extension remains in `source/car_training`. The local environment
-does not install Isaac Sim, CUDA, PyTorch, or the extension: importing the extension
-starts importing Isaac modules. Syntax checks and editing work locally; simulation,
-task listing, and training need the server environment below. Syntax checks do not
-validate imports, assets, or simulator behavior.
+The installed entry point is `rc-car`; it takes no arguments. `uv run` installs
+and uses the project's locked environment, including development and tracking
+dependencies by default. No separate sync or dependency flags are needed.
+`config.yaml` selects the operation, named profile, output directory, budgets and
+W&B destination. Its default `operation: check` runs Ruff, format verification,
+ty and CPU tests. It does not authenticate, allocate cloud compute or start Isaac.
+Python 3.11 and [uv](https://docs.astral.sh/uv/) are required.
 
-### NVIDIA server / workstation
+| `operation` | Purpose |
+| --- | --- |
+| `check` | Run the local quality suite; default and safe on the Mac |
+| `plan` | Print the merged recipe and paths without running it |
+| `tracking-check` | Check configured W&B authentication/project access; not upload proof |
+| `train` | Run bounded training and matched evaluations on an already prepared Linux RTX host |
+| `inspect` | Inspect a saved `job.input_run`; write evidence to a fresh `job.output` |
+| `upload` | Attach completed outputs to the saved W&B run; historical offline metrics must already be synced |
 
-This code uses the full Isaac Sim runtime, including camera rendering. Apple Silicon
-and macOS cannot run that runtime; `--headless` does not remove its NVIDIA RTX
-requirement. Use a compatible Linux NVIDIA RTX server/workstation (Windows is also
-supported upstream). Check the [Isaac Sim hardware and driver requirements](https://docs.isaacsim.omniverse.nvidia.com/5.1.0/installation/requirements.html),
-including the compatibility checker, before provisioning a machine. A CUDA-capable
-GPU alone is insufficient.
+Each profile contains its own training settings; the shared `tracking` section
+chooses the destination and mode. Leave `job.output` unset for an automatically
+allocated directory, or specify a fresh directory for a particular investigation.
+W&B generates its own display name; the local record retains the name, run ID
+and URL. Existing directories are never overwritten. Historical numerical JSON
+recipes live only under `tests/fixtures/legacy_recipes` for comparison.
+Limitations and interpretation belong in experiment reports, not the YAML.
+No credentials belong in YAML, source, logs or artifacts.
 
-### Reproducible Linux runtime (Brev or a local RTX desktop)
+`train` is fixture-only. Follow the [operations runbook](docs/operations.md) for the
+locked runtime, approved source/assets, explicit NVIDIA EULA acceptance, host
+credentials, backup and deletion. The workflow does **not** allocate or delete
+instances. A process timeout is **not** a provider billing cap.
+On the prepared GPU host, select the simulator dependencies with
+`uv run --locked --no-group cpu --extra isaac rc-car`. Both modes use the same
+root `pyproject.toml`, `uv.lock` and `.venv`; there is no second environment file.
+CPU and Isaac options are mutually exclusive. Select Isaac on every GPU command:
+plain `uv run rc-car` selects CPU dependencies and can switch Torch back to CPU.
+Do not switch dependencies while another job uses this checkout.
+`job.timeout_seconds` bounds the training supervisor; it is not a global deadline
+for local checks, inspection or W&B operations.
 
-`environments/isaac/pyproject.toml` and its separate `uv.lock` pin Python 3.11,
-Isaac Sim 5.1.0, Isaac Lab v2.3.0 at a resolved Git commit, CUDA 12.8 PyTorch
-2.7.0, SB3 2.7.0 and transitive dependencies. This recovery baseline follows the
-[versioned upstream guide](https://isaac-sim.github.io/IsaacLab/v2.3.0/source/setup/installation/pip_installation.html).
-The runtime environment targets **Linux x86_64**; use Ubuntu on the desktops for
-the same setup. The Mac development environment is deliberately separate.
+## What has actually been demonstrated?
 
-```bash
-# Ubuntu system prerequisite (in addition to a working NVIDIA driver):
-sudo apt-get install libglu1-mesa
-./scripts/setup_isaac.sh
-# Isaac Sim requires acceptance of NVIDIA's EULA on first launch.
-# After reviewing and accepting it, unattended runs can use:
-export OMNI_KIT_ACCEPT_EULA=YES
-./scripts/isaac.sh scripts/list_envs.py
-```
+| Evidence | Result and boundary |
+| --- | --- |
+| [E001: foundation integration](experiments/E001-foundation-integration/README.md) | Four Basic/Multi GPU gates passed on the frozen 153-file `astra-foundation-v2` source |
+| [E006: 900-second fixture baseline](experiments/E006-900s-fixture-baseline/README.md) | Matched 15-second evaluation: 66 → 0 off-track resets; combined reset-excluded travel 98.773 → 197.148 m |
+| [E003: image-input correction](experiments/E003-policy-image-encoding/README.md) | Separate 168-file v3 candidate passed 453 local tests; its four GPU gates remain pending |
 
-The wrapper always runs from the repository root and selects the locked Linux
-environment. No global Python environment, personal Git identity, shell startup
-files are required. The setup script creates an ignored `.isaaclab/` checkout
-at the verified upstream commit (upstream wheels omit required config files). The old `git-itai.sh`,
-`git-sasan.sh`, and `git-will.sh` identity-switching scripts have been removed.
-Use your normal Git identity configuration.
+[Watch actual before/after driving](outputs/cloud-validation/20260927-run02/remote/outputs/baselines/basic-900s-01/experiment/start-vs-end.mp4).
+The baseline used generated, uncalibrated circles: no full lap, held-out
+generalization, historical convergence reproduction or real-car transfer was
+demonstrated. Its result does not validate the newer image or tracking changes.
+Later working-tree edits are not the frozen v2 or v3 snapshots.
 
-### Running without the original USD files
+The September 27 GPU session was deleted after a checksum-verified local backup
+of 240 files. See the [session receipt](outputs/cloud-validation/20260927-run02/session.json).
+Local paths under `outputs/` are ignored by Git; keep the verified backup.
 
-Generate a self-contained six-joint car and 12 identical circular-track USDs:
+## Live tracking and durable results
 
-```bash
-uv run --locked --group assets python scripts/generate_test_assets.py
-export CAR_TRAINING_ASSET_ROOT="$PWD/generated_assets"
-./scripts/isaac.sh scripts/smoke_test.py --task Multiagent-Car-Training-v0 --num_envs 4 --headless --enable_cameras --fixture --train --output outputs/multiagent
-```
+Online tracking sends metrics and selected training videos **from the training
+host directly to W&B**, so the laptop is not an upload relay. Authentication and
+project access are checked before simulator startup. The online workflow also
+uploads final checkpoints, matched evaluation data and media. Offline mode is
+an explicit choice, not a silent fallback when online authentication fails.
 
-The generator works on the Mac as well as Linux. It refuses to overwrite a
-nonempty output directory. The fixtures need no external meshes or textures;
-`fixture.json` records their dimensions and limitations. They match the inherited
-wheel joint names and chassis sensor path. They are **uncalibrated test assets**,
-not a replacement for the physical car model or evidence of useful driving skill.
+[W&B project](https://wandb.ai/2710-multiagent-rl/sim-training) ·
+[15-minute baseline](https://wandb.ai/2710-multiagent-rl/sim-training/runs/434aa9828c404f999d1863242058f783) ·
+[Basic rehearsal](https://wandb.ai/2710-multiagent-rl/sim-training/runs/2f170b9a2a1044829ef01ac686466951) ·
+[Multi rehearsal](https://wandb.ai/2710-multiagent-rl/sim-training/runs/0261f7aa1729410ea072d7b31b3561f1).
+All three saved runs have now been uploaded and server-verified against their
+original history, final summary, media metadata and exact checkpoint/evaluation
+artifact manifests. See the [upload receipt](outputs/wandb-upload-20260927/summary.json).
+This CPU-side recovery is not a GPU test of the newer online launcher. Keep local
+backups even after upload; W&B is not the only copy.
 
-The bounded smoke test runs the actual `Multiagent-Car-Training-v0` task, checks
-finite observations/rewards/poses and movement excluding reset jumps, then runs
-at least 64 PPO agent-timesteps (rounded to a full rollout: 128 with four cars).
-It saves a checkpoint, `result.json`, camera render, and a policy-input panel in
-`outputs/multiagent/`. The panel shows track then four car-history channels.
-Fixture-specific camera, timestep, and actuator overrides stay in the smoke test.
-Use `--num_envs 2` for the initial check on a 16 GB desktop. The four-car test
-is verified only on the A6000.
+## Where to work
 
-For the original model, set `CAR_TRAINING_ASSET_ROOT` to the recovered asset bundle
-(or unset it to use the package's `assets/` directory). It must contain
-`robot_assets/leatherback_simple_better.usd` and
-`scene_assets/tracks_thickness_random/track_0.usd` through `track_11.usd`, with all
-referenced meshes/textures. The alternate TTR configuration references
-`robot_assets/ttr_nano_v1.usd`. The generator only supplies the active Leatherback
-interface. Do not run the original training configuration on fixture geometry
-without the fixture overrides.
+| Path | Responsibility |
+| --- | --- |
+| `config.yaml` | The editable workflow, profiles and tracking destination |
+| `src/rc_car/` | Portable kernels/models/contracts, workflow, experiments and telemetry |
+| `source/car_training/` | Inherited Isaac adapters, packaged with `rc_car`; not CPU-importable |
+| `pyproject.toml` / `uv.lock` | One dependency definition/lock, with optional Isaac support |
+| `tests/` | CPU contracts, compatibility and failure-path tests |
+| `experiments/` | Single-hypothesis protocols/reports; [registry](experiments/README.md) |
+| `scripts/` | Reproducible setup, internal workers, supervised jobs and verified handoffs |
+| `outputs/` | Ignored raw runs, media, checkpoints and verified handoffs |
+| `scratch/` | Ignored one-off local scripts, generated review pages and debugging work; never required by a fresh clone |
 
-**Historical single-car commands from `main`; not revalidated on this branch:**
+Read [architecture and scientific contracts](docs/architecture.md),
+[test boundaries](docs/testing-and-brev.md), the
+[portable-foundation decision](docs/decisions/0001-portable-foundation.md) and
+[tickets](docs/tickets.md). [Refactor history](docs/refactor.md) preserves the
+reasoning and review record. Dated bring-up/handoff documents are historical
+evidence, not current launch instructions or current cloud state.
 
-```bash
-./scripts/isaac.sh scripts/zero_agent.py --task Basic-Car-Training-v0 --num_envs 1 --headless --enable_cameras
-./scripts/isaac.sh scripts/sb3/train.py --task Basic-Car-Training-v0 --num_envs 1 --headless --enable_cameras --max_iterations 2
-```
+## Assets and framework code
 
-### Hardware and moving between machines
+`generated_assets/` is procedural test input generated by the versioned fixture
+generator, not the original team's calibrated asset library. Generated files
+stay outside Git; each run preserves the exact bytes and checksums in its asset
+bundle. Generator source alone does not establish byte-for-byte determinism.
+Small authored tracks/models belong in Git (prefer text USD where practical).
+Large binary assets need a pinned artifact or LFS workflow with provenance and
+delivery checks; a Git ignore rule is not a delivery or backup mechanism.
 
-The same runtime lock is intended for the Brev A6000 and Linux RTX desktops.
-For the 4070 Ti Super 16 GB / Ryzen 7900X / 32 GB RAM and the Intel i7-14700F /
-32 GB RAM machine, begin with **one environment, headless, cameras enabled**.
-Check the second machine's exact GPU and VRAM with `nvidia-smi`; do not rely on
-the reported “RTX 5070 16 GB” name. Compatibility and usable environment counts
-must be verified on each machine; 16 GB does not imply the A6000's capacity.
-Budget tens of GB of disk for simulator packages, uv cache, shaders, and runs.
-
-Copy source, both lockfiles, and run artifacts between machines. Recreate the
-environment with `./scripts/setup_isaac.sh`; do not copy
-`.venv` directories. Keep `CAR_TRAINING_ASSET_ROOT` machine-specific. Save
-`nvidia-smi`, `uv pip freeze --python environments/isaac/.venv/bin/python`, and
-both lockfiles with substantive training results. See `docs/bringup.md` for the
-actual tested machine and remaining limitations.
-
-### Set up IDE
-
-To setup the IDE, please follow these instructions:
-
-- Run VSCode Tasks, by pressing `Ctrl+Shift+P`, selecting `Tasks: Run Task` and running the `setup_python_env` in the drop down menu.
-  When running this task, you will be prompted to add the absolute path to your Isaac Sim installation.
-
-If everything executes correctly, it should create a file .python.env in the `.vscode` directory.
-The file contains the python paths to all the extensions provided by Isaac Sim and Omniverse.
-This helps in indexing all the python modules for intelligent suggestions while writing code. This is related to IsaacSim and Omniverse syntax highlighting.
-
-- To enable syntax highlighting for IsaacLab related modules, make sure to manually add the full path to `settings.json` file.
-
-
-### Setup as Omniverse Extension
-
-An example UI extension is provided that will load upon enabling your extension defined in `source/car_training/car_training/ui_extension_example.py`.
-
-To enable your extension, follow these steps:
-
-1. **Add the search path of this project/repository** to the extension manager:
-    - Navigate to the extension manager using `Window` -> `Extensions`.
-    - Click on the **Hamburger Icon**, then go to `Settings`.
-    - In the `Extension Search Paths`, enter the absolute path to the `source` directory of this project/repository.
-    - If not already present, in the `Extension Search Paths`, enter the path that leads to Isaac Lab's extension directory directory (`IsaacLab/source`)
-    - Click on the **Hamburger Icon**, then click `Refresh`.
-
-2. **Search and enable your extension**:
-    - Find your extension under the `Third Party` category.
-    - Toggle it to enable your extension.
-
-## Code formatting
-
-There is a pre-commit template to automatically format your code.
-To install pre-commit:
-
-```bash
-uv sync --locked
-```
-
-Then you can run pre-commit with:
-
-```bash
-uv run --locked pre-commit run --all-files
-```
-
-## Troubleshooting
-
-### Pylance Missing Indexing of Extensions
-
-In some VsCode versions, the indexing of part of the extensions is missing.
-In this case, add the path to your extension in `.vscode/settings.json` under the key `"python.analysis.extraPaths"`.
-
-```json
-{
-    "python.analysis.extraPaths": [
-        "<path-to-ext-repo>/source/car_training"
-    ]
-}
-```
-
-### Pylance Crash
-
-If you encounter a crash in `pylance`, it is probable that too many files are indexed and you run out of memory.
-A possible solution is to exclude some of omniverse packages that are not used in your project.
-To do so, modify `.vscode/settings.json` and comment out packages under the key `"python.analysis.extraPaths"`
-Some examples of packages that can likely be excluded are:
-
-```json
-"<path-to-isaac-sim>/extscache/omni.anim.*"         // Animation packages
-"<path-to-isaac-sim>/extscache/omni.kit.*"          // Kit UI tools
-"<path-to-isaac-sim>/extscache/omni.graph.*"        // Graph UI tools
-"<path-to-isaac-sim>/extscache/omni.services.*"     // Services tools
-...
-```
+Isaac Lab comes from NVIDIA's pinned `isaaclab==2.3.0` bundle, which includes its
+runtime configuration and assets. No `.isaaclab` checkout or editable framework
+paths are required. The package consolidation is locally checked, but has not
+yet been exercised on a GPU; the older driving videos do not validate it.

@@ -19,12 +19,14 @@ import numpy as np
 import cv2
 import logging
 import torch.nn.functional as F
+from rc_car.core.rewards import legacy_line_proximity, legacy_steering_penalty
 
 from car_training.tasks.manager_based.car_training.mdp.utils.helpers import find_closest_point
 from car_training.tasks.manager_based.car_training.mdp.observation import (
     robot_pos,
     aligned_robot_vel,
     robot_vel,
+    aligned_obstacle_image,
     aligned_other_agents_image
 )
 from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import (
@@ -55,7 +57,32 @@ def get_logger(env: ManagerBasedRLEnv) -> GpuSafeLogger:
         _LOGGER = base.getChild(short_name)
     return _LOGGER
 
-def distance_from_center_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg, global_frame = False) -> torch.Tensor:
+def _reward_obstacle_present(
+    env: ManagerBasedRLEnv,
+    robot_cfg: SceneEntityCfg,
+    multi_obstacle_cfgs: list[SceneEntityCfg] | None = None,
+) -> torch.Tensor:
+    """Choose the task's existing obstacle observation without mixing arenas.
+
+    Basic tasks explicitly supply static obstacle configurations. Shared-track
+    tasks omit them and retain their historical other-agent/history observation.
+    This routing fix does not change the shared-track history or ego semantics.
+    """
+    if multi_obstacle_cfgs is not None:
+        if not env.unwrapped.enable_obstacles:
+            return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+        obstacle_imgs = aligned_obstacle_image(env, robot_cfg, multi_obstacle_cfgs)
+    else:
+        obstacle_imgs = aligned_other_agents_image(env, robot_cfg)
+    return torch.any(obstacle_imgs < 0.12, dim=tuple(range(1, obstacle_imgs.ndim)))
+
+
+def distance_from_center_reward(
+    env: ManagerBasedRLEnv,
+    robot_cfg: SceneEntityCfg,
+    global_frame: bool = False,
+    multi_obstacle_cfgs: list[SceneEntityCfg] | None = None,
+) -> torch.Tensor:
     """
     Reward for being close to the center of the track.
 
@@ -73,20 +100,10 @@ def distance_from_center_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCf
 
     closest_track_points = find_closest_point(car_centers, track_points, track_points_lengths)  # (num_envs, 2)
     distances = torch.norm(car_centers - closest_track_points, dim=1)  #
-    max_distance = MAX_DISTANCE_FROM_LINE
-    normalized_distances = distances / max_distance
-    # Reward is higher when the distance is smaller
-    reward = 1.0 - normalized_distances
-
-    obstacle_imgs = aligned_other_agents_image(env, robot_cfg)
-    obstacle_mask_dims = tuple(range(1, obstacle_imgs.ndim))
-    has_obstacle_pixel = torch.any(
-        obstacle_imgs < 0.12,
-        dim=obstacle_mask_dims,
+    has_obstacle_pixel = _reward_obstacle_present(env, robot_cfg, multi_obstacle_cfgs)
+    return legacy_line_proximity(
+        distances, has_obstacle_pixel, distance_scale_px=MAX_DISTANCE_FROM_LINE
     )
-   # If there is an obstacle, make the reward for line following 0
-    reward = torch.where(has_obstacle_pixel, torch.zeros_like(reward), reward)
-    return reward
 
 def velocity_reward(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg) -> torch.Tensor:
     """
@@ -175,7 +192,11 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     return penalty
 
 
-def turning_penalty(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg) -> torch.Tensor:
+def turning_penalty(
+    env: ManagerBasedRLEnv,
+    robot_cfg: SceneEntityCfg,
+    multi_obstacle_cfgs: list[SceneEntityCfg] | None = None,
+) -> torch.Tensor:
     """
     Penalty for large steering angles, encouraging the reset agent to take smoother turns.
 
@@ -193,17 +214,11 @@ def turning_penalty(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg) -> torch.
     drive = env.action_manager._terms["drive"]
     steer = drive._processed_actions[:, 1]  # (N,)
 
-    penalty = -1 * torch.abs(steer) / drive.max_steer # divide by max_steer to normalize
+    has_obstacle_pixel = _reward_obstacle_present(env, robot_cfg, multi_obstacle_cfgs)
 
-    obstacle_imgs = aligned_other_agents_image(env, robot_cfg)
-    obstacle_mask_dims = tuple(range(1, obstacle_imgs.ndim))
-    has_obstacle_pixel = torch.any(
-        obstacle_imgs < 0.12,
-        dim=obstacle_mask_dims,
+    penalty = legacy_steering_penalty(
+        steer, has_obstacle_pixel, max_steering_rad=drive.max_steer
     )
-
-    # penalty turns into reward if in proximity of an obstacle
-    penalty = torch.where(has_obstacle_pixel, torch.zeros_like(penalty), penalty)
 
     logger.debug_lazy("Steering angles for turning penalty: %s", lambda: steer)
     logger.debug_lazy("Turning penalty: %s", lambda: penalty)

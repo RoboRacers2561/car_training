@@ -240,11 +240,11 @@ class ObservationsCfg:
 
         # observation terms (order preserved)
         track_image = ObsTerm(func=aligned_track_neighborhood_image,
-                        params={"asset_cfg": SceneEntityCfg("robot"),},
-                        clip=(0.0, 255.0),)
+                        params={"asset_cfg": SceneEntityCfg("robot"), "global_frame": False},
+                        clip=(0.0, 255.0), scale=255.0,)
         obstacle_image = ObsTerm(func=aligned_obstacle_image, # needs robot and obstacle cfg to find the relative pose and then align the image accordingly
                         params={"asset_cfg": SceneEntityCfg("robot"), "multi_obstacle_cfgs": [SceneEntityCfg("obstacle_0"), SceneEntityCfg("obstacle_1"), SceneEntityCfg("obstacle_2"), SceneEntityCfg("obstacle_3")]}, 
-                        clip=(0.0, 255.0),)
+                        clip=(0.0, 255.0), scale=255.0,)
         robot_vel = ObsTerm(func=aligned_robot_vel,
                                 params={"asset_cfg": SceneEntityCfg("robot"), "normalize": True},
                                 )
@@ -298,6 +298,7 @@ class RewardsCfg:
         func=distance_from_center_reward,
         params={
             "robot_cfg": SceneEntityCfg("robot"),
+            "multi_obstacle_cfgs": [SceneEntityCfg("obstacle_0"), SceneEntityCfg("obstacle_1"), SceneEntityCfg("obstacle_2"), SceneEntityCfg("obstacle_3")],
         },
         weight=3.0,
     )
@@ -343,7 +344,7 @@ class TerminationsCfg:
 
     # Out of bounds termination
     out_of_bounds = DoneTerm(func=off_track_termination, 
-                             params={"asset_cfg": SceneEntityCfg("robot")},)
+                             params={"asset_cfg": SceneEntityCfg("robot"), "global_frame": False},)
 
     # collision_chassis = DoneTerm(func=mdp.terminations.illegal_contact,
     #                      params={
