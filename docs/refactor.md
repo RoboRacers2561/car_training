@@ -91,7 +91,7 @@ that every historical checkpoint loads on a Mac without a migration step.
   Both locks validate (66 root / 226 Isaac packages); installed development
   dependencies pass compatibility checks. This does not mean remote CI ran.
 - Current restart state and exact next gates:
-  [September 26 handoff](handoffs/2026-09-26-resume.md).
+  [September 26 handoff](https://github.com/multiagent-rl-cars/sim-training/blob/0e1199da8f230226e02071226283f5a8c51c3489/docs/handoffs/2026-09-26-resume.md).
 
 ### September 26 preparation record and remaining stages
 
@@ -101,7 +101,7 @@ guards, bounded shell supervisors, offline job isolation, and an artifact-based
 integration inspector. Independent reviews fixed nested-timeout group escape and
 status-write error masking. See [ops/README](../ops/README.md). At that date these
 were locally tested preparations, not real Linux/Isaac or billing-safety
-validation. The [September 26 operations handoff](handoffs/2026-09-26-local-only-ops.md)
+validation. The [September 26 operations handoff](https://github.com/multiagent-rl-cars/sim-training/blob/0e1199da8f230226e02071226283f5a8c51c3489/docs/handoffs/2026-09-26-local-only-ops.md)
 preserves that state; the September 27 evidence boundary above supersedes it.
 
 The migration sequence below remains the roadmap. In particular, history
